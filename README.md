@@ -15,9 +15,10 @@ App de finanzas personales para iPhone, iPad y Mac. Se instala desde el navegado
 
 ## Cuentas y administración
 
-- **Administrador:** andresdelgado1204@gmail.com. En la pestaña **Admin** crea las cuentas de las demás personas (usuario + contraseña inicial), bloquea o desbloquea, y ve las finanzas de cada una (solo lectura). Con **Modo personal** (en Ajustes) se oculta la pestaña Admin.
-- **Nadie puede registrarse solo.** Las cuentas las crea el admin; una cuenta creada por fuera de la app no tiene acceso.
-- Los usuarios se muestran como `nombre@finanzas` y entran escribiendo solo `nombre`. Cada persona puede cambiar su contraseña en **Ajustes → Cambiar contraseña**.
+- **Administrador:** andresdelgado1204@gmail.com. En la pestaña **Admin** ve a todas las personas, puede bloquearlas o desbloquearlas y ver sus finanzas (solo lectura). Con **Modo personal** (en Ajustes) se oculta la pestaña Admin.
+- **Agregar a alguien:** Firebase → Authentication → Usuarios → **Agregar usuario** (correo + contraseña). Esa persona ya puede entrar a la app y aparece en la lista del admin. El botón **Abrir Firebase** del panel Admin lleva directo ahí.
+- **El registro público está desactivado** en Firebase (Authentication → Configuración → Acciones del usuario), así que nadie puede crear su propia cuenta.
+- Cada persona puede cambiar su contraseña en **Ajustes → Cambiar contraseña**.
 - El administrador está definido por su UID en `firestore.rules` y `firebase-config.js`.
 
 ## Ingreso y seguridad

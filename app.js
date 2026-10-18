@@ -296,7 +296,6 @@ function onLogin(u) {
 function onProfile(doc) {
   if (!doc.exists) {
     if (doc.metadata.fromCache) return; // esperar respuesta del servidor
-    if (!isAdmin()) { cloud.status = 'sin-acceso'; setStatusScreen('noaccess'); return; }
     const t = now();
     profileRef(cloud.user.uid).set({ email: cloud.user.email, createdAt: t, lastSeen: t, status: 'activo' })
       .catch(err => setStatusScreen('error', cloudErr(err)));
@@ -394,6 +393,7 @@ function agoText(ts) {
   const d = Math.round(h / 24);
   return d === 1 ? 'ayer' : `hace ${d} días`;
 }
+const FIREBASE_USERS_URL = 'https://console.firebase.google.com/project/mis-finanzas-58ed0/authentication/users';
 const APP_URL = 'https://andresdelgado1204-netizen.github.io/mis-finanzas/';
 const credsText = c => `Mis Finanzas\nEntra en: ${APP_URL}\nUsuario: ${c.login}\nContraseña: ${c.pass}\n\nCuando entres, cámbiala en Ajustes → Cambiar contraseña.`;
 const STATUS = { activo: ['Activa', 'ok'], pendiente: ['Pendiente', 'warn'], bloqueado: ['Bloqueada', 'bad'] };
@@ -689,14 +689,16 @@ const views = {
         <div class="row-end"><button class="btn ghost" data-action="adm-creds-close">Listo</button><button class="btn" data-action="adm-copy">Copiar datos</button></div>
       </div>` : '';
     const addHTML = `<section class="card"><h3>Agregar persona</h3>
-      <p class="muted" style="margin-bottom:12px">Crea la cuenta y entrégale su usuario y contraseña. Podrá cambiar la contraseña en Ajustes.</p>
-      <form id="adminAddForm" class="form addform">
-        <label>Usuario<input id="addUser" name="user" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="maria" required></label>
-        <label>Contraseña inicial<input id="addPass" name="pass" type="text" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" minlength="6" placeholder="Mínimo 6 caracteres" required></label>
-        <p class="muted addprev" id="addPreview">Se verá como <b>usuario@finanzas</b></p>
-        <p id="addError" class="autherr" hidden></p>
-        <div class="row-end"><button class="btn" id="addBtn">Crear cuenta</button></div>
-      </form>${credsHTML}</section>`;
+      <p class="muted" style="margin-bottom:12px">Las cuentas se crean en Firebase. Cuando agregas a alguien ahí, ya puede entrar a la app con ese correo y contraseña, y aparece en esta lista.</p>
+      <ol class="steps">
+        <li>Toca <b>Abrir Firebase</b> y luego <b>Agregar usuario</b>.</li>
+        <li>Escribe el correo y una contraseña de al menos 6 caracteres.</li>
+        <li>Envíale a la persona el enlace de la app, su correo y su contraseña.</li>
+      </ol>
+      <div class="row-end">
+        <button class="btn ghost" data-action="adm-copy-link">Copiar enlace de la app</button>
+        <a class="btn" href="${FIREBASE_USERS_URL}" target="_blank" rel="noopener">Abrir Firebase</a>
+      </div></section>`;
     return top + viewerHTML() + addHTML + pendHTML + listHTML;
   },
 
@@ -1058,6 +1060,10 @@ document.addEventListener('click', e => {
       break;
     }
     case 'adm-close': ui.viewing = null; render(); break;
+    case 'adm-copy-link':
+      if (navigator.clipboard) navigator.clipboard.writeText(APP_URL).then(() => toast('Enlace copiado')).catch(() => toast(APP_URL));
+      else toast(APP_URL);
+      break;
     case 'adm-creds-close': ui.newCreds = null; render(); break;
     case 'adm-copy': {
       const txt = credsText(ui.newCreds);

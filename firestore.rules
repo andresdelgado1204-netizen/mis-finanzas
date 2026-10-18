@@ -15,8 +15,12 @@ service cloud.firestore {
     // Perfil de cada persona: correo, fechas y estado (pendiente / activo / bloqueado)
     match /profiles/{userId} {
       allow read: if isAdmin() || (request.auth != null && request.auth.uid == userId);
-      // Solo el administrador crea cuentas (perfiles)
-      allow create: if isAdmin();
+      // Cada cuenta creada en Firebase crea su perfil como activa al entrar por primera vez
+      // (el registro público está desactivado: solo el admin agrega cuentas desde la consola)
+      allow create: if isAdmin()
+        || (request.auth != null && request.auth.uid == userId
+            && request.resource.data.status == 'activo'
+            && request.resource.data.keys().hasOnly(['email', 'createdAt', 'lastSeen', 'status']));
       // Cada persona solo puede actualizar su último uso y correo; el estado lo cambia el admin
       allow update: if isAdmin()
         || (request.auth != null && request.auth.uid == userId
