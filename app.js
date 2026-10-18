@@ -980,20 +980,11 @@ const views = {
         <div class="card stat"><small>Gastos</small><b class="neg">${fmt(exp)}</b></div>
         <div class="card stat"><small>Disponible del mes</small><b class="${bal >= 0 ? 'pos' : 'neg'}">${fmt(bal)}</b></div>
       </section>
-      <section class="card">
-        <div class="summary-head"><h3>Lo que planeas gastar este mes</h3><a href="#" data-tab="presupuesto">Ver presupuesto →</a></div>
-        ${budCats.length ? `<div class="summary-grid">
-          <div><small>Gasto previsto</small><b>${fmt(budTotal)}</b></div>
-          <div><small>Gastado</small><b class="neg">${fmt(budSpent)}</b></div>
-          <div><small>${budSpent > budTotal ? 'Excedido' : 'Te queda'}</small><b class="${budSpent > budTotal ? 'neg' : 'pos'}">${fmt(Math.abs(budTotal - budSpent))}</b></div>
-        </div>${progress(budSpent, budTotal)}` : ''}
-        ${budgetCats().length ? budgetCats().map(c => {
-          const limit = budgetFor(c), used = spent[c] || 0;
-          return `<div class="budrow"><div class="budhead"><b>${esc(c)}</b><span class="muted">Gastado ${fmt(used)}${limit ? ` de ${fmt(limit)}` : ' · sin límite'}</span></div>
-            ${limit ? progress(used, limit) : ''}
-            <p class="muted">${limit ? (used > limit ? `Excedido en ${fmt(used - limit)}` : `Te quedan ${fmt(limit - used)}`) : 'Define un límite en Presupuesto.'}</p>${budgetPaidControl(c)}</div>`;
-        }).join('') : '<p class="muted">Agrega categorías en Presupuesto para ver aquí tus límites y gastos.</p>'}
-        <p class="muted">El presupuesto es lo que planeas gastar. Marca «Pagado» y elige la cuenta para registrar un gasto real.</p>
+      <div class="summary-head budget-summary-title"><h3>Presupuesto del mes</h3><a href="#" data-tab="presupuesto">Ver presupuesto →</a></div>
+      <section class="cards3" aria-label="Resumen del presupuesto del mes">
+        <div class="card stat"><small>Gasto previsto</small><b>${fmt(budTotal)}</b></div>
+        <div class="card stat"><small>Pagado</small><b class="neg">${fmt(budSpent)}</b></div>
+        <div class="card stat"><small>${budSpent > budTotal ? 'Excedido' : 'Pendiente'}</small><b class="${budSpent > budTotal ? 'neg' : 'pos'}">${fmt(Math.abs(budTotal - budSpent))}</b></div>
       </section>
       <section class="card">
         <div class="summary-head"><h3>Tus fondos y metas</h3><a href="#" data-tab="metas">Ver metas →</a></div>

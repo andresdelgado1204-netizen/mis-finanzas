@@ -526,3 +526,5 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .budget-paid { color: var(--text); font-weight: 600; }
 #budgetPayNotice { margin-bottom: 18px; }
 #budgetPayAmount { font-size: 1.4rem; }
+
+.budget-summary-title { margin: 0 4px 8px; }
