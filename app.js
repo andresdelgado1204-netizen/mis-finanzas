@@ -153,13 +153,13 @@ function occasionalHomeCard() {
   const expenses = occasionalExpenses();
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
   return `<section class="card occasional-summary">
-    <div class="summary-head"><h3>Gastos ocasionales</h3><a href="#" data-tab="movimientos">Ver gastos →</a></div>
+    <div class="summary-head"><h3>Movimientos</h3><a href="#" data-tab="movimientos">Ver movimientos →</a></div>
     <p class="occasional-total neg">${fmt(total)}</p>
     <p class="muted">Total del mes seleccionado · separado de tus gastos mensuales.</p>
     ${expenses.length ? `<details class="occasional-details"><summary>Ver detalle (${expenses.length})</summary>
       <ul class="txlist">${expenses.map(t => txRow(t).replace('</small>', ` · ${esc(fmtDate(t.date))}</small>`)).join('')}</ul>
     </details>` : '<p class="muted">Aquí aparecerán los gastos que agregues con un nombre, como una salida o una reparación.</p>'}
-    <button type="button" class="btn wide" data-action="new-tx">+ Agregar gasto ocasional</button>
+    <button type="button" class="btn wide" data-action="new-tx">+ Agregar movimiento</button>
   </section>`;
 }
 function reservesCard() {
@@ -275,7 +275,7 @@ function monthlyPayCard() {
     ${inc > 0 ? progress(exp + reserved, inc) : ''}
     ${inc > 0 && left > 0 && current < next ? `<p class="muted">Puedes gastar unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta fin de mes.</p>` : ''}
     ${pays.length ? `<p class="payok">✓ Pago del mes registrado: ${fmt(paid)}</p>` : `<button class="btn wide" data-action="pay-month" data-date="${date}">Registrar pago del mes</button>`}
-    <p class="muted">Resumen del mes completo. Puedes registrar ingresos adicionales en Gastos ocasionales.</p>
+    <p class="muted">Resumen del mes completo. Puedes registrar ingresos adicionales en Movimientos.</p>
   </section>`;
 }
 

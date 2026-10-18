@@ -24,7 +24,7 @@
 
   <nav class="tabs" aria-label="Navegación principal">
     <button data-tab="inicio"><span>🏠</span>Inicio</button>
-    <button data-tab="movimientos"><span>🧾</span>Gastos ocasionales</button>
+    <button data-tab="movimientos"><span>🧾</span>Movimientos</button>
     <button data-tab="presupuesto"><span>📊</span>Gastos mensuales</button>
     <button data-tab="metas"><span>🎯</span>Metas</button>
     <button data-tab="admin" id="adminTab" hidden><span>🛡️</span>Admin<i id="adminBadge" class="badge" hidden></i></button>
@@ -102,7 +102,7 @@
       <label>Monto<input name="amount" type="number" inputmode="decimal" min="0" step="any" required></label>
       <label>Fecha<input name="date" type="date" required></label>
       <label>Desde la cuenta<select name="account"></select></label>
-      <label class="check"><input name="asTx" type="checkbox" checked> Registrarlo también como gasto en Gastos ocasionales</label>
+      <label class="check"><input name="asTx" type="checkbox" checked> Registrarlo también como gasto en Movimientos</label>
       <div class="row-end">
         <button type="button" class="btn ghost" data-close>Cancelar</button>
         <button class="btn">Guardar</button>
@@ -268,6 +268,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=15"></script>
-  <script src="app.js?v=39"></script>
+  <script src="app.js?v=40"></script>
 </body>
 </html>
