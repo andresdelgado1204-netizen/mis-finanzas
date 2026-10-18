@@ -485,23 +485,6 @@ const views = {
         <p id="syncDetail" class="muted"></p>
       </section>
 
-      <section class="card"><h3>Preferencias</h3>
-        <form id="prefform" class="form">
-          <label>Empiezo a registrar en<select name="startMonth">${(() => {
-            const opts = []; let m = shiftMonth(thisMonth(), -12);
-            for (let i = 0; i < 25; i++, m = shiftMonth(m, 1)) opts.push(m);
-            if (startMonth() && !opts.includes(startMonth())) opts.unshift(startMonth());
-            return opts.map(x => `<option value="${x}" ${x === startMonth() ? 'selected' : ''}>${monthLabel(x)}</option>`).join('');
-          })()}</select></label>
-          <label>Me pagan cada semana el día<select name="payday">${DAYS.map((d, i) => `<option value="${i}" ${i === payday() ? 'selected' : ''}>${d}</option>`).join('')}</select></label>
-          <label>Moneda<select name="currency">${CURRENCIES.map(x => `<option ${x === data.settings.currency ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
-          <label>Categorías de gasto (una por línea)<textarea name="gasto" rows="7">${esc(c.gasto.join('\n'))}</textarea></label>
-          <label>Categorías de ingreso (una por línea)<textarea name="ingreso" rows="4">${esc(c.ingreso.join('\n'))}</textarea></label>
-          <p class="muted" style="margin:-4px 0 10px">Renombrar una categoría no cambia los movimientos ya guardados con el nombre anterior.</p>
-          <div class="row-end"><button class="btn">Guardar preferencias</button></div>
-        </form>
-      </section>
-
       <section class="card"><h3>Tus datos</h3>
         <div class="btngrid">
           <button class="btn ghost" data-action="export-json">Exportar respaldo (JSON)</button>
