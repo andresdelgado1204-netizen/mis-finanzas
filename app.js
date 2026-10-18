@@ -295,6 +295,31 @@ function saveBudgetMonth(cat, amount, repeat, deleted = false) {
   upsert('budgets', { id: 'b:' + cat + ':' + ui.month, category: cat, month: ui.month,
     amount, repeat, deleted, createdAt: now() });
 }
+function budgetPayment(cat, month = ui.month) {
+  return live(data.transactions).find(t => t.type === 'gasto' && t.amount > 0 && t.category === cat && t.budgetMonth === month && t.date.startsWith(month));
+}
+function budgetPaidControl(cat) {
+  const paid = budgetPayment(cat), amount = budgetFor(cat);
+  return `<label class="budget-repeat budget-paid"><input type="checkbox" data-budget-pay="${esc(cat)}" ${paid ? 'checked disabled' : ''} ${amount > 0 ? '' : 'disabled'}>
+    ${paid ? `Pagado: ${fmt(paid.amount)} · ${esc(accName(accId(paid)))}` : 'Marcar como pagado'}</label>`;
+}
+let pendingBudgetPayment = null;
+function openBudgetPayment(cat) {
+  const amount = budgetFor(cat);
+  if (budgetPayment(cat) || !(amount > 0)) { render(); return; }
+  pendingBudgetPayment = { cat, month: ui.month, amount };
+  const f = $('#budgetPayForm');
+  f.reset();
+  $('#budgetPayTitle').textContent = 'Pagar ' + cat;
+  $('#budgetPayAmount').textContent = fmt(amount);
+  f.account.innerHTML = '<option value="" disabled selected>Elige una cuenta</option>' + accOptions('');
+  f.date.min = ui.month + '-01';
+  f.date.max = addDays(shiftMonth(ui.month, 1) + '-01', -1);
+  f.date.value = today().startsWith(ui.month) ? today() : ui.month + '-01';
+  const spent = spentByCat(ui.month)[cat] || 0;
+  $('#budgetPayNotice').textContent = spent > 0 ? `Ya tienes ${fmt(spent)} en gastos de esta categoría este mes. Este pago agregará ${fmt(amount)} adicionales; revisa que no estés registrando el mismo pago dos veces.` : 'Se registrará como gasto y se descontará de la cuenta que elijas.';
+  $('#budgetPayDialog').showModal();
+}
 function catColor(cat) {
   const all = [...data.settings.categories.gasto, ...data.settings.categories.ingreso];
   const i = all.indexOf(cat);
@@ -956,9 +981,9 @@ const views = {
         <div class="card stat"><small>Disponible del mes</small><b class="${bal >= 0 ? 'pos' : 'neg'}">${fmt(bal)}</b></div>
       </section>
       <section class="card">
-        <div class="summary-head"><h3>Tu presupuesto del mes</h3><a href="#" data-tab="presupuesto">Ver presupuesto →</a></div>
+        <div class="summary-head"><h3>Lo que planeas gastar este mes</h3><a href="#" data-tab="presupuesto">Ver presupuesto →</a></div>
         ${budCats.length ? `<div class="summary-grid">
-          <div><small>Presupuestado</small><b>${fmt(budTotal)}</b></div>
+          <div><small>Gasto previsto</small><b>${fmt(budTotal)}</b></div>
           <div><small>Gastado</small><b class="neg">${fmt(budSpent)}</b></div>
           <div><small>${budSpent > budTotal ? 'Excedido' : 'Te queda'}</small><b class="${budSpent > budTotal ? 'neg' : 'pos'}">${fmt(Math.abs(budTotal - budSpent))}</b></div>
         </div>${progress(budSpent, budTotal)}` : ''}
@@ -966,9 +991,9 @@ const views = {
           const limit = budgetFor(c), used = spent[c] || 0;
           return `<div class="budrow"><div class="budhead"><b>${esc(c)}</b><span class="muted">Gastado ${fmt(used)}${limit ? ` de ${fmt(limit)}` : ' · sin límite'}</span></div>
             ${limit ? progress(used, limit) : ''}
-            <p class="muted">${limit ? (used > limit ? `Excedido en ${fmt(used - limit)}` : `Te quedan ${fmt(limit - used)}`) : 'Define un límite en Presupuesto.'}</p></div>`;
+            <p class="muted">${limit ? (used > limit ? `Excedido en ${fmt(used - limit)}` : `Te quedan ${fmt(limit - used)}`) : 'Define un límite en Presupuesto.'}</p>${budgetPaidControl(c)}</div>`;
         }).join('') : '<p class="muted">Agrega categorías en Presupuesto para ver aquí tus límites y gastos.</p>'}
-        <p class="muted">El gasto se actualiza con los movimientos registrados en cada categoría durante el mes seleccionado.</p>
+        <p class="muted">El presupuesto es lo que planeas gastar. Marca «Pagado» y elige la cuenta para registrar un gasto real.</p>
       </section>
       <section class="card">
         <div class="summary-head"><h3>Tus fondos y metas</h3><a href="#" data-tab="metas">Ver metas →</a></div>
@@ -1013,6 +1038,7 @@ const views = {
         <div class="budinput"><label for="bud-${esc(c)}">Límite mensual</label>
           <span class="budctl"><input id="bud-${esc(c)}" type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}">
           <button class="iconbtn" data-action="del-budget" data-cat="${esc(c)}" aria-label="Quitar ${esc(c)} del presupuesto" title="Quitar del presupuesto">✕</button></span></div>
+        ${budgetPaidControl(c)}
         <label class="budget-repeat"><input type="checkbox" data-budget-repeat="${esc(c)}" ${budgetRepeats(activeBudget(c)) ? 'checked' : ''}> Repetir cada mes</label>
       </div>`;
     }).join('');
@@ -1404,6 +1430,7 @@ $('#txForm').addEventListener('submit', e => {
   if (!amount) { toast('Ingresa un monto mayor a 0'); return; }
   const base = { id: editingTx?.id || uid(), type: txType, amount, date: f.date.value,
     note: f.note.value.trim(), createdAt: editingTx?.createdAt || now() };
+  if (editingTx?.budgetMonth && txType === 'gasto' && f.category.value === editingTx.category && f.date.value.startsWith(editingTx.budgetMonth)) base.budgetMonth = editingTx.budgetMonth;
   if (txType === 'transferencia') {
     if (f.account.value === f.to.value) { toast('Elige dos cuentas distintas'); return; }
     upsert('transactions', Object.assign(base, { category: 'Transferencia', from: f.account.value, to: f.to.value }));
@@ -1513,6 +1540,10 @@ document.addEventListener('change', e => {
     el.form.repeat.checked = defaultBudgetRepeat(el.value === '__new' ? el.form.newcat.value : el.value);
     if (el.value === '__new') setTimeout(() => el.form.newcat.focus(), 30);
   }
+  if (el.dataset.budgetPay !== undefined) {
+    el.checked = false;
+    openBudgetPayment(el.dataset.budgetPay);
+  }
   if (el.dataset.budgetRepeat !== undefined) {
     const cat = el.dataset.budgetRepeat;
     saveBudgetMonth(cat, budgetFor(cat), el.checked);
@@ -1534,6 +1565,20 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'budgetPayForm') {
+    e.preventDefault();
+    const pending = pendingBudgetPayment, f = e.target;
+    if (!pending) return;
+    if (budgetPayment(pending.cat, pending.month)) { $('#budgetPayDialog').close(); render(); toast('Este pago ya está registrado'); return; }
+    if (!accounts().some(a => a.id === f.account.value)) { toast('Elige una cuenta'); return; }
+    if (!f.date.value.startsWith(pending.month)) { toast('Elige una fecha del mes seleccionado'); return; }
+    upsert('transactions', { id: 'budget-pay:' + pending.month + ':' + pending.cat, type: 'gasto',
+      category: pending.cat, amount: pending.amount, account: f.account.value, date: f.date.value,
+      budgetMonth: pending.month, note: 'Pago del presupuesto', createdAt: now() });
+    pendingBudgetPayment = null;
+    $('#budgetPayDialog').close();
+    toast('Pago registrado y descontado de la cuenta'); return;
+  }
   if (e.target.id === 'reservesForm') {
     e.preventDefault();
     const emergency = Number(e.target.emergency.value), savings = Number(e.target.savings.value);
