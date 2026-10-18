@@ -884,7 +884,7 @@ function setAuthMode(m) {
   f.password.autocomplete = signup ? 'new-password' : 'current-password';
   $('#authToggle').hidden = true; // las cuentas las crea el administrador
   $('#authToggle').textContent = signup ? '¿Ya tienes cuenta? Ingresa' : '¿No tienes cuenta? Crea una';
-  $('#authOther').hidden = m !== 'reauth';
+  $('#authOther').hidden = true;
   $('#authNotice').hidden = !signup;
   $('#authUserHint').hidden = !signup;
   $('#authUserLabel').textContent = signup ? 'Usuario' : 'Usuario o correo';
