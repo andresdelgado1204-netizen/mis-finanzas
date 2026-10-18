@@ -532,3 +532,25 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .six-range { margin-bottom: 20px; }
 .six-months .donut { width: 200px; height: 200px; }
 .six-months .donut b { overflow-wrap: anywhere; max-width: 100%; }
+
+/* Presupuesto cómodo de usar con una mano en pantallas pequeñas. */
+.budget-panel > .row-end { margin: 18px 0; }
+@media (max-width: 599px) {
+  .budget-panel { background: transparent; border: 0; box-shadow: none; padding: 0; }
+  .budget-panel > h3 { font-size: 1.2rem; margin: 0 4px 8px; }
+  .budget-panel > .muted { margin: 0 4px; }
+  .budget-panel > .row-end .btn { width: 100%; min-height: 52px; }
+  .budget-items { display: grid; gap: 16px; }
+  .budget-items .budrow { background: var(--card); padding: 18px; border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow); }
+  .budget-items .budhead { flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .budget-items .budhead > b { font-size: 1.05rem; overflow-wrap: anywhere; }
+  .budget-items .budinput { display: block; margin: 16px 0; }
+  .budget-items .budinput > label { display: block; margin-bottom: 7px; }
+  .budget-items .budctl { display: grid; grid-template-columns: minmax(0, 1fr) 48px; gap: 10px; }
+  .budget-items .budinput input { width: 100%; min-height: 52px; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .budget-items .iconbtn { width: 48px; height: 52px; border-radius: 14px; }
+  .budget-items .budget-repeat { min-height: 56px; margin: 8px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: 14px; font-size: .9rem; line-height: 1.4; }
+  .budget-items .budget-repeat input { width: 24px; height: 24px; }
+  .budget-items .budget-paid { background: var(--accent-soft); border-color: transparent; }
+  .budget-panel .empty { background: var(--card); border-radius: 20px; }
+}

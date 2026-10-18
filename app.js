@@ -1029,7 +1029,7 @@ const views = {
     const spent = spentByCat(ui.month);
     const cats = budgetCats();
     const addBtn = `<div class="row-end"><button class="btn" data-action="new-budget">+ Agregar categoría</button></div>`;
-    if (!cats.length) return `<section class="card"><h3>Límites por categoría</h3>
+    if (!cats.length) return `<section class="card budget-panel"><h3>Presupuesto del mes</h3>
       <p class="empty" style="padding:24px 12px">Todavía no tienes categorías en tu presupuesto.<br>Agrega las que quieras controlar, por ejemplo Supermercado o Transporte, con su límite mensual.</p>
       ${addBtn}</section>`;
     const rows = cats.map(c => {
@@ -1037,15 +1037,15 @@ const views = {
       return `<div class="budrow">
         <div class="budhead"><b>${esc(c)}</b><span class="muted">${fmt(s)}${b ? ` / ${fmt(b)}` : ''}</span></div>
         ${b ? progress(s, b) : ''}
-        <div class="budinput"><label for="bud-${esc(c)}">Límite mensual</label>
+        <div class="budinput"><label for="bud-${esc(c)}">Monto previsto</label>
           <span class="budctl"><input id="bud-${esc(c)}" type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}">
           <button class="iconbtn" data-action="del-budget" data-cat="${esc(c)}" aria-label="Quitar ${esc(c)} del presupuesto" title="Quitar del presupuesto">✕</button></span></div>
         ${budgetPaidControl(c)}
         <label class="budget-repeat"><input type="checkbox" data-budget-repeat="${esc(c)}" ${budgetRepeats(activeBudget(c)) ? 'checked' : ''}> Repetir cada mes</label>
       </div>`;
     }).join('');
-    return `<section class="card"><h3>Límites por categoría</h3>
-      <p class="muted">Marca «Repetir cada mes» para mantener una categoría en los meses siguientes. Las demás solo aparecen en este mes. El gasto se calcula por separado cada mes.</p>${rows}${addBtn}</section>`;
+    return `<section class="card budget-panel"><h3>Presupuesto del mes</h3>
+      <p class="muted">Planifica el monto y marca «Pagado» cuando salga el dinero. Activa «Repetir cada mes» para tus gastos habituales.</p>${addBtn}<div class="budget-items">${rows}</div></section>`;
   },
 
   metas() {
