@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
   <header class="top">
@@ -132,6 +132,16 @@
     </form>
   </dialog>
 
+  <!-- Ofrecer Face ID después de ingresar -->
+  <dialog id="faceDialog" class="ask">
+    <p><b>¿Quieres entrar con Face ID / huella la próxima vez?</b></p>
+    <p class="muted" style="margin:0 0 8px">Así no tendrás que escribir tu contraseña en este dispositivo.</p>
+    <div class="row-end">
+      <button type="button" class="btn ghost" data-action="face-no">Ahora no</button>
+      <button type="button" class="btn" data-action="face-yes">Activar</button>
+    </div>
+  </dialog>
+
   <!-- Confirmación -->
   <dialog id="askDialog" class="ask">
     <p id="askText"></p>
@@ -165,9 +175,11 @@
     <div class="gatebox">
       <img src="icon-192.png" class="gatelogo" alt="" width="72" height="72">
       <h1>Mis Finanzas</h1>
-      <p class="gatesub" id="lockEmail"></p>
-      <button type="button" class="btn wide big" data-action="unlock">Desbloquear con Face ID / huella</button>
-      <button type="button" class="linkbtn" data-action="lock-password">Usar mi contraseña</button>
+      <p class="gatesub">Ingresa a tu cuenta</p>
+      <p class="lockuser" id="lockEmail"></p>
+      <button type="button" class="btn wide big faceid" data-action="unlock"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 16a4 4 0 0 0 5 0"/></svg>Entrar con Face ID / huella</button>
+      <button type="button" class="linkbtn" data-action="lock-password">Entrar con contraseña</button>
+      <button type="button" class="linkbtn subtle" data-action="other-account">Usar otra cuenta</button>
     </div>
   </div>
 
@@ -196,7 +208,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=9"></script>
-  <script src="app.js?v=9"></script>
+  <script src="firebase-config.js?v=10"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

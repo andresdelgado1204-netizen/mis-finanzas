@@ -313,6 +313,7 @@ function onProfile(doc) {
     startData();
     if (isAdmin()) startAdmin();
     showScreen(unlocked ? 'app' : 'lock');
+    if (cloud.justLoggedIn) { cloud.justLoggedIn = false; offerFaceId(); }
     render();
   } else {
     stopData();
@@ -578,8 +579,11 @@ async function biometricAvailable() {
   try { return !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); }
   catch { return false; }
 }
+let bioOK = false;
+biometricAvailable().then(v => { bioOK = v; });
+const LS_FACE_ASKED = 'finanzas.faceIdPreguntado';
 async function enableLock() {
-  if (!(await biometricAvailable())) { toast('Este dispositivo no tiene Face ID, Touch ID ni huella disponibles para la app.'); return; }
+  if (!bioOK) { toast('Este dispositivo no tiene Face ID, Touch ID ni huella disponibles para la app.'); return; }
   try {
     const cred = await navigator.credentials.create({ publicKey: {
       rp: { name: 'Mis Finanzas' },
@@ -590,8 +594,15 @@ async function enableLock() {
       timeout: 60000, attestation: 'none',
     } });
     writeJSON(LS_LOCK, { uid: cloud.user.uid, credId: toB64u(cred.rawId) });
-    unlocked = true; render(); toast('Bloqueo activado en este dispositivo');
+    unlocked = true; render(); toast('Listo: la próxima vez entras con Face ID / huella');
   } catch (e) { toast('No se activó el bloqueo: se canceló o no se pudo verificar.'); }
+}
+function offerFaceId() {
+  let asked = false;
+  try { asked = localStorage.getItem(LS_FACE_ASKED + '.' + cloud.user.uid) === '1'; } catch { }
+  if (asked || lockInfo() || !bioOK) return;
+  try { localStorage.setItem(LS_FACE_ASKED + '.' + cloud.user.uid, '1'); } catch { }
+  setTimeout(() => $('#faceDialog').showModal(), 400);
 }
 function disableLock() { try { localStorage.removeItem(LS_LOCK); } catch { } render(); toast('Bloqueo desactivado'); }
 async function unlock() {
@@ -786,8 +797,8 @@ const views = {
         <p class="acctline">${window.PREVIEW ? 'Vista previa (sin cuenta)' : `Ingresaste como <b>${esc(cloud.user ? shownName(cloud.user.email) : '')}</b>`}</p>
         <p id="syncDetail" class="muted"></p>
         <div class="lockrow">
-          <div><b>Bloqueo con Face ID / huella</b>
-            <small>${lockInfo() ? 'Activado en este dispositivo. Se pide al abrir la app.' : 'Pide Face ID, Touch ID o tu huella al abrir la app en este dispositivo.'}</small></div>
+          <div><b>Entrar con Face ID / huella</b>
+            <small>${lockInfo() ? 'Activado en este dispositivo: entras sin escribir tu contraseña.' : 'Entra a la app con Face ID, Touch ID o tu huella en este dispositivo.'}</small></div>
           <button class="btn ${lockInfo() ? 'ghost' : ''}" data-action="lock-toggle">${lockInfo() ? 'Desactivar' : 'Activar'}</button>
         </div>
         ${isAdmin() ? `<div class="lockrow">
@@ -1049,12 +1060,18 @@ document.addEventListener('click', e => {
     case 'personal-on': setPersonalMode(true); break;
     case 'personal-off': setPersonalMode(false); ui.tab = 'admin'; render(); break;
     case 'logout':
+      if (lockInfo()) { unlocked = false; showScreen('lock'); window.scrollTo(0, 0); break; }
       ask('¿Cerrar sesión en este dispositivo? Tus datos quedan guardados en tu cuenta.', 'Cerrar sesión').then(ok => {
         if (!ok) return;
         try { localStorage.removeItem(userKey()); localStorage.removeItem(LS_LOCK); } catch { }
         cloud.auth.signOut();
       });
       break;
+    case 'other-account':
+      try { localStorage.removeItem(userKey()); localStorage.removeItem(LS_LOCK); } catch { }
+      cloud.auth.signOut(); break;
+    case 'face-yes': $('#faceDialog').close(); enableLock(); break;
+    case 'face-no': $('#faceDialog').close(); toast('Puedes activarlo cuando quieras en Ajustes'); break;
     case 'prev-month':
       if (startMonth() && shiftMonth(ui.month, -1) < startMonth()) { toast('Tus registros empiezan en ' + monthLabel(startMonth())); break; }
       ui.month = shiftMonth(ui.month, -1); render(); break;
@@ -1280,6 +1297,7 @@ document.addEventListener('submit', e => {
         .then(() => { f.password.value = ''; toast('¡Cuenta creada!'); setAuthMode('login'); })
         .catch(err => showAuthError(authErr(err))).finally(done);
     } else {
+      cloud.justLoggedIn = true;
       cloud.auth.signInWithEmailAndPassword(email, pass)
         .then(() => { f.password.value = ''; })
         .catch(err => showAuthError(authErr(err))).finally(done);
