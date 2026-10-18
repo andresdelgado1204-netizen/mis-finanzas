@@ -43,6 +43,9 @@ function sessionAccent() {
 function applyAccent() {
   const k = sessionAccent();
   if (k) document.documentElement.dataset.accent = k; else delete document.documentElement.dataset.accent;
+  // la barra del teléfono toma el mismo fondo
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) { const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(); if (bg) meta.content = bg; }
 }
 const CURRENCY_NAMES = { CLP: 'Peso chileno', USD: 'Dólar estadounidense', EUR: 'Euro', ARS: 'Peso argentino', PEN: 'Sol peruano',
   COP: 'Peso colombiano', MXN: 'Peso mexicano', BRL: 'Real brasileño', UYU: 'Peso uruguayo' };
@@ -1201,7 +1204,7 @@ const views = {
       </section>
 
       <section class="card"><h3>Color de tu app</h3>
-        <p class="muted" style="margin-bottom:12px">Elige el color que más te guste. Cada cuenta tiene el suyo, así sabes al tiro qué sesión está abierta. Funciona en modo claro y oscuro.</p>
+        <p class="muted" style="margin-bottom:12px">Elige el color que más te guste: cambia los botones y el fondo de tu app. Cada cuenta tiene el suyo, así sabes al tiro qué sesión está abierta. Funciona en modo claro y oscuro.</p>
         <div class="swatches">
           ${ACCENTS.map(a => `<button type="button" class="swatchbox ${sessionAccent() === a.key ? 'on' : ''}" data-action="accent" data-v="${a.key}" aria-pressed="${sessionAccent() === a.key}"><span class="swatch" style="--sw:${a.color}"></span>${a.name}</button>`).join('')}
         </div>

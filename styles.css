@@ -620,3 +620,13 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .swatchbox.on .swatch::before { content: "✓"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 1.05rem; }
 .swatchbox.on { color: var(--text); font-weight: 600; }
 .swatchbox:focus-visible { outline: 2px solid var(--text); outline-offset: 4px; border-radius: 8px; }
+/* El color de la sesión también tiñe el fondo (y en modo oscuro tarjetas y bordes) */
+:root[data-accent] {
+  --bg: color-mix(in srgb, var(--btn) 9%, #f6f7fa);
+  --line: color-mix(in srgb, var(--btn) 14%, #e0e5ec);
+}
+:root[data-theme="dark"][data-accent] {
+  --bg: color-mix(in srgb, var(--btn) 16%, #0b0f16);
+  --card: color-mix(in srgb, var(--btn) 10%, #161c26);
+  --line: color-mix(in srgb, var(--btn) 24%, #29323f);
+}
