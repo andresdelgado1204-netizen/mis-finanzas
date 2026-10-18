@@ -20,6 +20,30 @@ const DEFAULT_ACCOUNTS = [
   { id: 'banco', name: 'Banco', kind: 'banco', initial: 0, updatedAt: 0 },
 ];
 const CURRENCIES = ['CLP', 'USD', 'EUR', 'ARS', 'PEN', 'COP', 'MXN', 'BRL', 'UYU'];
+const ACCENTS = [
+  { key: 'azul', name: 'Azul', color: '#435dcc' },
+  { key: 'marino', name: 'Marino', color: '#203c6b' },
+  { key: 'turquesa', name: 'Turquesa', color: '#0b7f77' },
+  { key: 'verde', name: 'Verde', color: '#2f7a50' },
+  { key: 'grafito', name: 'Grafito', color: '#3d4552' },
+  { key: 'morado', name: 'Morado', color: '#6a43bb' },
+  { key: 'rosa', name: 'Rosa', color: '#b23c6f' },
+  { key: 'terracota', name: 'Terracota', color: '#ad512a' },
+  { key: 'dorado', name: 'Dorado', color: '#8a6508' },
+];
+// Color de la sesión: el que eligió la persona, o uno asignado según su cuenta
+function sessionAccent() {
+  const chosen = data.settings.accentColor;
+  if (ACCENTS.some(a => a.key === chosen)) return chosen;
+  const uid = cloud.user ? cloud.user.uid : '';
+  if (!uid) return '';
+  let h = 0; for (const ch of uid) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return ACCENTS[h % ACCENTS.length].key;
+}
+function applyAccent() {
+  const k = sessionAccent();
+  if (k) document.documentElement.dataset.accent = k; else delete document.documentElement.dataset.accent;
+}
 const CURRENCY_NAMES = { CLP: 'Peso chileno', USD: 'Dólar estadounidense', EUR: 'Euro', ARS: 'Peso argentino', PEN: 'Sol peruano',
   COP: 'Peso colombiano', MXN: 'Peso mexicano', BRL: 'Real brasileño', UYU: 'Peso uruguayo' };
 
@@ -608,6 +632,7 @@ function stopData() {
 }
 
 function onLogout() {
+  delete document.documentElement.dataset.accent;
   try { sessionStorage.removeItem(RELOAD_SESSION_KEY); } catch { }
   cloud.profile = null; renderBrand();
   stopData();
@@ -1175,6 +1200,13 @@ const views = {
         <div class="row-end"><button class="btn ghost danger" data-action="logout">Cerrar sesión</button></div>
       </section>
 
+      <section class="card"><h3>Color de tu app</h3>
+        <p class="muted" style="margin-bottom:12px">Elige el color que más te guste. Cada cuenta tiene el suyo, así sabes al tiro qué sesión está abierta. Funciona en modo claro y oscuro.</p>
+        <div class="swatches">
+          ${ACCENTS.map(a => `<button type="button" class="swatchbox ${sessionAccent() === a.key ? 'on' : ''}" data-action="accent" data-v="${a.key}" aria-pressed="${sessionAccent() === a.key}"><span class="swatch" style="--sw:${a.color}"></span>${a.name}</button>`).join('')}
+        </div>
+      </section>
+
       <section class="card"><h3>Moneda</h3>
         <p class="muted" style="margin-bottom:10px">Estás usando <b>${esc(data.settings.currency)} – ${esc(CURRENCY_NAMES[data.settings.currency] || data.settings.currency)}</b>. Cambiarla solo cambia cómo se muestran los montos; no convierte los valores.</p>
         <label class="form" style="display:block"><select id="currencySel" data-action-change="currency">
@@ -1219,6 +1251,7 @@ const views = {
 };
 
 function render() {
+  applyAccent();
   renderBrand();
   $('#adminTab').hidden = !showAdmin();
   if (ui.tab === 'admin' && !showAdmin()) ui.tab = 'inicio';
@@ -1514,6 +1547,10 @@ document.addEventListener('click', e => {
     case 'next-month': ui.month = shiftMonth(ui.month, 1); render(); break;
     case 'filter': ui.filter = el.dataset.v; render(); break;
     case 'new-tx': openTx(); break;
+    case 'accent':
+      data.settings = Object.assign({}, data.settings, { accentColor: el.dataset.v, updatedAt: now() });
+      commit(); toast('Color: ' + (ACCENTS.find(a => a.key === el.dataset.v) || {}).name);
+      break;
     case 'add-money': {
       // abre el formulario de ingreso directo a la cuenta que usa (efectivo o banco)
       openTx();

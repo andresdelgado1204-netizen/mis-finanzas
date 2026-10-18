@@ -478,7 +478,7 @@ h3, h4 { font-weight: 650; letter-spacing: -.015em; }
 .form label, .flabel { font-size: .9rem; }
 input, select, textarea { color: var(--text); }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
-.btn, .fab { color: #fff; background: #435dcc; }
+.btn, .fab { color: #fff; background: var(--btn, #435dcc); }
 .btn.ghost, .btn.outline { color: var(--text); }
 .btn.danger { color: var(--neg); }
 .btn.dangerfill { background: #b93139; color: #fff; }
@@ -592,3 +592,31 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 @media (prefers-reduced-motion: reduce) { .switch, .switch i { transition: none; } }
 
 .curchip { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 99px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; vertical-align: middle; background: var(--accent-soft); color: var(--accent); }
+
+/* ===== Color propio de cada sesión (se elige en Ajustes) ===== */
+:root[data-accent="azul"], :root[data-theme="light"][data-accent="azul"] { --accent: #435dcc; --accent-soft: #e9edfc; --btn: #435dcc; }
+:root[data-theme="dark"][data-accent="azul"] { --accent: #a2b5ff; --accent-soft: #263451; --btn: #435dcc; }
+:root[data-accent="marino"], :root[data-theme="light"][data-accent="marino"] { --accent: #203c6b; --accent-soft: #e3e9f3; --btn: #203c6b; }
+:root[data-theme="dark"][data-accent="marino"] { --accent: #9fb6dd; --accent-soft: #1f2a3d; --btn: #203c6b; }
+:root[data-accent="turquesa"], :root[data-theme="light"][data-accent="turquesa"] { --accent: #0b7f77; --accent-soft: #dcf3f1; --btn: #0b7f77; }
+:root[data-theme="dark"][data-accent="turquesa"] { --accent: #4fe0d3; --accent-soft: #15312f; --btn: #0b7f77; }
+:root[data-accent="verde"], :root[data-theme="light"][data-accent="verde"] { --accent: #2f7a50; --accent-soft: #e2f2e9; --btn: #2f7a50; }
+:root[data-theme="dark"][data-accent="verde"] { --accent: #7ddcaa; --accent-soft: #1c3328; --btn: #2f7a50; }
+:root[data-accent="grafito"], :root[data-theme="light"][data-accent="grafito"] { --accent: #3d4552; --accent-soft: #e8eaee; --btn: #3d4552; }
+:root[data-theme="dark"][data-accent="grafito"] { --accent: #c3cad6; --accent-soft: #2a2f37; --btn: #3d4552; }
+:root[data-accent="morado"], :root[data-theme="light"][data-accent="morado"] { --accent: #6a43bb; --accent-soft: #eee8fa; --btn: #6a43bb; }
+:root[data-theme="dark"][data-accent="morado"] { --accent: #c4a6ff; --accent-soft: #2c2346; --btn: #6a43bb; }
+:root[data-accent="rosa"], :root[data-theme="light"][data-accent="rosa"] { --accent: #b23c6f; --accent-soft: #fae7ef; --btn: #b23c6f; }
+:root[data-theme="dark"][data-accent="rosa"] { --accent: #f7a3c7; --accent-soft: #3a2030; --btn: #b23c6f; }
+:root[data-accent="terracota"], :root[data-theme="light"][data-accent="terracota"] { --accent: #ad512a; --accent-soft: #f8e8df; --btn: #ad512a; }
+:root[data-theme="dark"][data-accent="terracota"] { --accent: #f2a77f; --accent-soft: #3a271c; --btn: #ad512a; }
+:root[data-accent="dorado"], :root[data-theme="light"][data-accent="dorado"] { --accent: #8a6508; --accent-soft: #f5eedb; --btn: #8a6508; }
+:root[data-theme="dark"][data-accent="dorado"] { --accent: #e8c46a; --accent-soft: #342b17; --btn: #8a6508; }
+.fab { box-shadow: 0 6px 20px color-mix(in srgb, var(--btn, var(--accent)) 40%, transparent); }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 12px 8px; margin-top: 4px; }
+.swatchbox { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: .78rem; color: var(--muted); background: none; border: 0; padding: 0; }
+.swatch { width: 42px; height: 42px; border-radius: 50%; position: relative; background: var(--sw); box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.swatchbox.on .swatch::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2.5px solid var(--sw); }
+.swatchbox.on .swatch::before { content: "✓"; position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 1.05rem; }
+.swatchbox.on { color: var(--text); font-weight: 600; }
+.swatchbox:focus-visible { outline: 2px solid var(--text); outline-offset: 4px; border-radius: 8px; }
