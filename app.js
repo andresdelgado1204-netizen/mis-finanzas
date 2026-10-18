@@ -1154,16 +1154,28 @@ function setTxType(type, selected) {
   txType = type;
   const isTr = type === 'transferencia';
   $('#txType').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.type === type));
-  $('#catLabel').hidden = isTr;
+  $('#catLabel').hidden = isTr || type === 'gasto';
   $('#txNewCategoryWrap').hidden = true;
   $('#txForm').newCategory.required = false;
   $('#txForm').newCategory.disabled = true;
-  $('#txForm').category.required = !isTr;
+  $('#txForm').category.required = !isTr && type !== 'gasto';
   $('#toLabel').hidden = !isTr;
   $('#accLabel').textContent = isTr ? 'Desde' : 'Pagado con';
   $('#payMethodWrap').hidden = type !== 'ingreso';
   $('#accField').hidden = type === 'ingreso';
   if (!isTr) fillCategories(type, selected);
+  const nameField = $('#txForm').newCategory;
+  nameField.readOnly = false;
+  $('#txNewCategoryTitle').textContent = 'Nombre de la nueva categoría';
+  if (type === 'gasto') {
+    $('#txNewCategoryWrap').hidden = false;
+    nameField.disabled = false;
+    nameField.required = true;
+    nameField.value = editingTx ? (editingTx.expenseName || editingTx.category || '') : '';
+    nameField.readOnly = !!editingTx?.budgetMonth;
+    $('#txNewCategoryTitle').textContent = 'Nombre del gasto';
+    nameField.placeholder = 'Ej. Veterinaria, regalo o reparación';
+  }
 }
 let payMethod = 'transferencia';
 function setPayMethod(m) {
@@ -1215,7 +1227,7 @@ function txRow(t) {
     title = 'Ajuste de saldo'; sub = esc(accName(accId(t)));
     amount = (t.amount >= 0 ? '+' : '−') + fmt(Math.abs(t.amount)); cls = 'neutral';
   } else {
-    title = esc(t.category);
+    title = esc(t.expenseName || t.category);
     sub = t.type === 'ingreso' ? (methodOf(t) === 'efectivo' ? '💵 Efectivo' : '🏦 Transferencia') : esc(accName(accId(t)));
     amount = (t.type === 'ingreso' ? '+' : '−') + fmt(t.amount); cls = t.type === 'ingreso' ? 'pos' : 'neg';
   }
@@ -1460,7 +1472,9 @@ $('#txForm').addEventListener('submit', e => {
   const f = e.target;
   const amount = parseAmount(f.amount.value);
   if (!amount) { toast('Ingresa un monto mayor a 0'); return; }
-  let category = f.category.value;
+  const expenseName = txType === 'gasto' ? f.newCategory.value.trim().replace(/\s+/g, ' ') : '';
+  if (txType === 'gasto' && !expenseName) { toast('Escribe el nombre del gasto'); return; }
+  let category = txType === 'gasto' ? (editingTx?.budgetMonth ? editingTx.category : 'Gastos ocasionales') : f.category.value;
   const creatingCategory = txType !== 'transferencia' && category === '__new_category__';
   if (creatingCategory) {
     category = f.newCategory.value.trim().replace(/\s+/g, ' ');
@@ -1469,6 +1483,7 @@ $('#txForm').addEventListener('submit', e => {
   }
   const base = { id: editingTx?.id || uid(), type: txType, amount, date: f.date.value,
     note: f.note.value.trim(), createdAt: editingTx?.createdAt || now() };
+  if (txType === 'gasto') base.expenseName = expenseName;
   if (editingTx?.budgetMonth && txType === 'gasto' && category === editingTx.category && f.date.value.startsWith(editingTx.budgetMonth)) base.budgetMonth = editingTx.budgetMonth;
   if (txType === 'transferencia') {
     if (f.account.value === f.to.value) { toast('Elige dos cuentas distintas'); return; }
@@ -1483,7 +1498,7 @@ $('#txForm').addEventListener('submit', e => {
     if (txType === 'ingreso' && category === 'Sueldo' && (!editingTx || editingTx.reserves)) {
       base.reserves = salaryReserves(amount, editingTx?.reserves?.rates || reserveRates());
     }
-    if (creatingCategory && !data.settings.categories[txType].includes(category)) {
+    if ((creatingCategory || txType === 'gasto') && !data.settings.categories[txType].includes(category)) {
       data.settings.categories[txType].push(category);
       data.settings.updatedAt = now();
     }

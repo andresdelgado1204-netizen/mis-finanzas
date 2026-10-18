@@ -60,7 +60,7 @@
         </div>
       </div>
       <label id="catLabel">Categoría<select name="category" required></select></label>
-      <label id="txNewCategoryWrap" hidden>Nombre del nuevo gasto o categoría<input name="newCategory" maxlength="60" placeholder="Ej. Veterinaria o Reparaciones" disabled></label>
+      <label id="txNewCategoryWrap" hidden><span id="txNewCategoryTitle">Nombre del gasto</span><input name="newCategory" maxlength="60" placeholder="Ej. Veterinaria o Reparaciones" disabled></label>
       <label id="accField"><span id="accLabel">Pagado con</span><select name="account"></select></label>
       <label id="toLabel" hidden>Hacia<select name="to"></select></label>
       <label>Fecha<input name="date" type="date" required></label>
@@ -268,6 +268,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=15"></script>
-  <script src="app.js?v=34"></script>
+  <script src="app.js?v=35"></script>
 </body>
 </html>
