@@ -754,3 +754,48 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .pwrap input { width: 100%; padding-right: 48px; }
 .eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); border-radius: 10px; padding: 0; cursor: pointer; }
 .eye:hover, .eye:focus-visible { color: var(--text); }
+
+/* ===== Inicio minimalista ===== */
+.mhome { padding: 20px 18px 14px; }
+.mlabel { font-size: .85rem; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.mtotal { font-size: 2.3rem; font-weight: 750; letter-spacing: -.03em; margin: 4px 0 2px; line-height: 1.15; }
+.mnote { margin: 8px 0 0; font-size: .85rem; color: var(--muted); }
+.accpills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.accpill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 999px; padding: 7px 12px; font: inherit; font-size: .85rem; }
+.accpill b { font-weight: 650; }
+.mactions { display: flex; gap: 4px; margin: 8px -8px 0; }
+.mactions .slink { font-size: .88rem; }
+.mweek .mleft { font-weight: 650; font-size: .95rem; color: var(--text); text-transform: none; }
+.mweek .mleft.neg { color: var(--neg); }
+.mweek .btn { margin-top: 12px; }
+.hbig { font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; margin-bottom: 10px; }
+.stackbar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--line); gap: 2px; }
+.stackbar span { display: block; min-width: 4px; }
+.mlist { list-style: none; margin: 12px 0 0; padding: 0; }
+.mlist li { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: .92rem; }
+.mlist li i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.mlist li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mlist li b { font-weight: 600; }
+.mlist.plain { margin-top: 0; }
+.mlist.plain li + li { border-top: 1px solid var(--line); }
+.kv { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; font-size: .92rem; color: var(--muted); }
+.kv b { color: var(--text); font-weight: 650; }
+.kv small { color: var(--muted); font-weight: 500; }
+.sixbars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; height: 120px; align-items: end; margin: 6px 0 4px; }
+.sixbars > div { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100%; position: relative; padding-bottom: 20px; }
+.sixbars .b { width: 9px; border-radius: 4px 4px 0 0; min-height: 2px; }
+.sixbars .b.inc { background: var(--inc); }
+.sixbars .b.exp { background: var(--exp); }
+.sixbars small { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: .72rem; color: var(--muted); text-transform: capitalize; }
+.six { margin-top: 18px; }
+.accpills { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.accpill { flex-direction: column; align-items: flex-start; gap: 2px; border-radius: 14px; padding: 10px 12px; text-align: left; color: var(--muted); font-size: .8rem; }
+.accpill b { color: var(--text); font-size: .98rem; }
+.accpill b.neg { color: var(--neg); }
+.hgoal .goal p.muted { margin-top: 6px; }
+.hgoal .mnote { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.hgoal .goal + .mnote { }
+.pinhome { display: block; margin: 10px 0 0; padding: 6px 0; border: 0; background: none; font: inherit; font-size: .85rem; color: var(--muted); }
+.pinhome.on { color: var(--accent); font-weight: 600; }
+/* pantalla de ingreso con el color elegido */
+:root[data-accent] .gatelogo { box-shadow: 0 6px 18px color-mix(in srgb, var(--btn) 30%, transparent); }

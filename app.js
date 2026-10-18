@@ -41,7 +41,10 @@ function sessionAccent() {
   return ACCENTS[h % ACCENTS.length].key;
 }
 function applyAccent() {
-  const k = sessionAccent();
+  let k = sessionAccent();
+  // se recuerda en este equipo, así la pantalla de ingreso también lleva tu color
+  if (k) { try { localStorage.setItem('finanzas.color', k); } catch { } }
+  else { try { k = localStorage.getItem('finanzas.color') || ''; } catch { } }
   if (k) document.documentElement.dataset.accent = k; else delete document.documentElement.dataset.accent;
   // la barra del teléfono toma el mismo fondo
   const meta = document.querySelector('meta[name="theme-color"]');
@@ -209,6 +212,19 @@ function reservesCard() {
   </section>`;
 }
 
+function sixMonthsCard() {
+  const first = shiftMonth(ui.month, -5);
+  const months = [...Array(6)].map((_, i) => shiftMonth(first, i));
+  const series = months.map(m => totals(m));
+  const inc = series.reduce((a, t) => a + t.inc, 0), exp = series.reduce((a, t) => a + t.exp, 0);
+  const max = Math.max(1, ...series.map(t => Math.max(t.inc, t.exp)));
+  return `<section class="card six">
+    <div class="summary-head"><h3>Últimos 6 meses</h3><span class="muted">${monthLabel(months[0], true)} – ${monthLabel(months[5], true)}</span></div>
+    <div class="sixbars">${series.map((t, i) => `<div><span class="b inc" style="height:${t.inc / max * 100}%"></span><span class="b exp" style="height:${t.exp / max * 100}%"></span><small>${monthLabel(months[i], true).slice(0, 3)}</small></div>`).join('')}</div>
+    <ul class="mlist"><li><i style="background:var(--inc)"></i><span>Ingresos</span><b>${fmt(inc)}</b></li><li><i style="background:var(--exp)"></i><span>Gastos</span><b>${fmt(exp)}</b></li></ul>
+  </section>`;
+}
+
 function totals(m) {
   let inc = 0, exp = 0;
   for (const t of txOfMonth(m)) { if (t.type === 'ingreso') inc += t.amount; else if (t.type === 'gasto') exp += t.amount; }
@@ -313,17 +329,11 @@ function monthlyPayCard() {
   const current = today();
   const date = current >= first && current < next ? current : first;
   const daysLeft = daysBetween(date, next);
-  return `<section class="card week">
-    <div class="weekhead"><h3>Este mes</h3><span class="muted">${monthLabel(month)}</span></div>
-    <div class="weekgrid">
-      <div><small>Recibiste</small><b class="pos">${fmt(inc)}</b></div>
-      <div><small>Gastaste</small><b class="neg">${fmt(exp)}</b></div>
-      <div><small>Disponible</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
-    </div>
-    ${reserved > 0 ? `<p class="muted">Reservado: <b>${fmt(reserved)}</b></p>` : ''}
+  return `<section class="card week mweek">
+    <div class="summary-head"><h3>Este mes</h3><span class="mleft ${left < 0 ? 'neg' : ''}">${left < 0 ? 'Te pasaste ' + fmt(-left) : 'Quedan ' + fmt(left)}</span></div>
     ${inc > 0 ? progress(exp + reserved, inc) : ''}
-    ${inc > 0 && left > 0 && current < next ? `<p class="muted">Unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta fin de mes</p>` : ''}
-    ${pays.length ? `<p class="payok">✓ Pago del mes registrado: ${fmt(paid)}</p>` : `<button class="btn wide" data-action="pay-month" data-date="${date}">Registrar pago del mes</button>`}
+    <p class="mnote">Gastaste ${fmt(exp)} de ${fmt(inc)}${inc > 0 && left > 0 && current < next ? ` · unos ${fmt(Math.floor(left / daysLeft))} por día` : ''}</p>
+    ${pays.length ? '' : `<button class="btn wide" data-action="pay-month" data-date="${date}">Registrar pago del mes</button>`}
   </section>`;
 }
 
@@ -630,7 +640,7 @@ function stopData() {
 }
 
 function onLogout() {
-  delete document.documentElement.dataset.accent;
+  setTimeout(applyAccent, 0);
   try { sessionStorage.removeItem(RELOAD_SESSION_KEY); } catch { }
   cloud.profile = null; renderBrand();
   stopData();
@@ -1053,81 +1063,62 @@ const views = {
   },
 
   inicio() {
-    const { inc, exp, bal } = totals(ui.month);
+    const { exp } = totals(ui.month);
     const byCat = Object.entries(spentByCat(ui.month)).sort((a, b) => b[1] - a[1]);
-    let acc = 0;
-    const stops = byCat.map(([c, v]) => { const a = acc / exp * 360; acc += v; return `${catColor(c)} ${a}deg ${acc / exp * 360}deg`; });
-    const donut = exp > 0
-      ? `<div class="donut" style="background:conic-gradient(${stops.join(',')})"><div><small>Gasto total</small><b>${fmt(exp)}</b></div></div>
-         <ul class="legend">${byCat.map(([c, v]) => `<li><i style="background:${catColor(c)}"></i><span>${esc(c)}</span><b>${fmt(v)}</b><em>${Math.round(v / exp * 100)}%</em></li>`).join('')}</ul>`
-      : '<p class="empty" style="flex:1">Sin gastos este mes.</p>';
-
-    // 6 meses terminando en el mes elegido, pero nunca antes del mes de inicio
-    const first = shiftMonth(ui.month, -5);
-    const months = [...Array(6)].map((_, i) => shiftMonth(first, i));
-    const series = months.map(m => ({ m, ...totals(m) }));
-    const sixIncome = series.reduce((sum, item) => sum + item.inc, 0);
-    const sixExpense = series.reduce((sum, item) => sum + item.exp, 0);
-    const sixTotal = sixIncome + sixExpense;
-    const incomeShare = sixTotal ? sixIncome / sixTotal * 100 : 0;
-    const sixChart = `<div class="donutwrap six-months">
-      <div class="donut" role="img" aria-label="Últimos seis meses: ingresos ${fmt(sixIncome)}, gastos ${fmt(sixExpense)}" style="background:${sixTotal ? `conic-gradient(var(--inc) 0% ${incomeShare}%, var(--exp) ${incomeShare}% 100%)` : 'var(--line)'}">
-        <div><small>Balance del período</small><b class="${sixIncome - sixExpense >= 0 ? 'pos' : 'neg'}">${fmt(sixIncome - sixExpense)}</b></div>
-      </div>
-      <ul class="legend">
-        <li><i style="background:var(--inc)"></i><span>Ingresos</span><b>${fmt(sixIncome)}</b><em>${sixTotal ? Math.round(incomeShare) : 0}%</em></li>
-        <li><i style="background:var(--exp)"></i><span>Gastos</span><b>${fmt(sixExpense)}</b><em>${sixTotal ? 100 - Math.round(incomeShare) : 0}%</em></li>
-      </ul>
-    </div>`;
-
     const spent = spentByCat(ui.month);
     const budCats = budgetCats().filter(c => budgetFor(c) > 0);
     const budTotal = budCats.reduce((s, c) => s + budgetFor(c), 0);
     const budSpent = budCats.reduce((s, c) => s + (spent[c] || 0), 0);
     const goals = live(data.goals);
+    const res = reservedAmounts();
 
     const accBal = balances();
     const accs = accounts();
     const total = accs.reduce((s, a) => s + (accBal[a.id] || 0), 0);
-    const reserved = reservedAmounts().total;
-    return `
-      <section class="card money">
-        <div class="moneyhead"><h3>Mi dinero <span class="curchip" title="${esc(CURRENCY_NAMES[data.settings.currency] || '')}">${esc(data.settings.currency)}</span></h3><b class="${total < 0 ? 'neg' : ''}">${fmt(total)}</b></div>
-        ${reserved > 0 ? `<p class="muted">Reservado: ${fmt(reserved)} · Disponible: <b>${fmt(total - reserved)}</b></p>` : ''}
-        <ul class="acclist">${accs.map(a => `<li data-action="edit-acc" data-id="${a.id}">
-          <span class="accicon">${accIcon(a)}</span><span class="accname">${esc(a.name)}</span>
-          <b class="${(accBal[a.id] || 0) < 0 ? 'neg' : ''}">${fmt(accBal[a.id] || 0)}</b></li>`).join('')}</ul>
-        <div class="row-end">
-          ${accountMode() === 'ambos' ? '<button class="btn ghost" data-action="new-acc">+ Cuenta</button>'
-            : `<button class="btn" data-action="add-money">${accountMode() === 'efectivo' ? '+ Agregar efectivo' : '+ Agregar dinero'}</button>`}
-          ${accs.length >= 2 ? '<button class="btn ghost" data-action="new-transfer">⇄ Mover dinero</button>' : ''}
-        </div>
-      </section>
-      ${isAdmin() ? weekCard() : monthlyPayCard()}
-      ${occasionalHomeCard()}
-      <section class="card" aria-label="Resumen de gastos mensuales">
+    const mode = accountMode();
+    const actions = [
+      mode === 'ambos' ? '<button class="slink" data-action="new-acc">+ Cuenta</button>'
+        : `<button class="slink" data-action="add-money">${mode === 'efectivo' ? '+ Agregar efectivo' : '+ Agregar dinero'}</button>`,
+      accs.length >= 2 ? '<button class="slink" data-action="new-transfer">⇄ Mover</button>' : '',
+    ].join('');
+
+    // 1. Mi dinero
+    const money = `<section class="card money mhome">
+        <div class="mlabel">Mi dinero <span class="curchip" title="${esc(CURRENCY_NAMES[data.settings.currency] || '')}">${esc(data.settings.currency)}</span></div>
+        <div class="mtotal ${total < 0 ? 'neg' : ''}">${fmt(total)}</div>
+        ${res.total > 0 ? `<p class="mnote">Disponible ${fmt(total - res.total)} · reservado ${fmt(res.total)}</p>` : ''}
+        <div class="accpills">${accs.map(a => `<button type="button" class="accpill" data-action="edit-acc" data-id="${a.id}">${accIcon(a)} ${esc(a.name)} <b class="${(accBal[a.id] || 0) < 0 ? 'neg' : ''}">${fmt(accBal[a.id] || 0)}</b></button>`).join('')}</div>
+        <div class="mactions">${actions}</div>
+      </section>`;
+
+    // 3. En qué gastas: una barra delgada y la lista corta
+    const top = byCat.slice(0, 4), rest = byCat.slice(4).reduce((s, [, v]) => s + v, 0);
+    const spendCard = `<section class="card">
+        <div class="summary-head"><h3>Gastos</h3><a href="#" data-tab="movimientos">Ver todo</a></div>
+        ${exp > 0 ? `<div class="hbig">${fmt(exp)}</div>
+          <div class="stackbar" role="img" aria-label="Gastos por categoría">${byCat.map(([c, v]) => `<span style="width:${v / exp * 100}%;background:${catColor(c)}"></span>`).join('')}</div>
+          <ul class="mlist">${top.map(([c, v]) => `<li><i style="background:${catColor(c)}"></i><span>${esc(c)}</span><b>${fmt(v)}</b></li>`).join('')}
+            ${rest > 0 ? `<li><i style="background:var(--line)"></i><span>Otros</span><b>${fmt(rest)}</b></li>` : ''}</ul>`
+          : '<p class="muted">Sin gastos este mes</p>'}
+      </section>`;
+
+    // 4. Gastos mensuales: solo si hay montos previstos
+    const budCard = budTotal > 0 ? `<section class="card">
         <div class="summary-head"><h3>Gastos mensuales</h3><a href="#" data-tab="presupuesto">Ver todo</a></div>
-        <div class="weekgrid">
-          <div><small>Previsto</small><b>${fmt(budTotal)}</b></div>
-          <div><small>Pagado</small><b class="neg">${fmt(budSpent)}</b></div>
-          <div><small>${budSpent > budTotal ? 'Excedido' : 'Pendiente'}</small><b class="${budSpent > budTotal ? 'neg' : 'pos'}">${fmt(Math.abs(budTotal - budSpent))}</b></div>
-        </div>
-        ${budTotal > 0 ? progress(budSpent, budTotal) : ''}
-      </section>
-      <section class="card">
-        <div class="summary-head"><h3>Fondos y metas</h3><a href="#" data-tab="metas">Ver todo</a></div>
-        <div class="reserve-grid">
-          <div><span>🛟 Fondo de emergencia</span><b>${fmt(reservedAmounts().emergency)}</b></div>
-          <div><span>🌱 Ahorro</span><b>${fmt(reservedAmounts().savings)}</b></div>
-        </div>
-        ${goals.length ? `<div class="home-goals">${goals.map(g => goalRow(g, false)).join('')}</div>` : ''}
-      </section>
-      <section class="card"><h3>¿En qué gastas?</h3><div class="donutwrap">${donut}</div></section>
-      <section class="card">
-        <div class="summary-head"><h3>Últimos 6 meses</h3><span class="muted">${monthLabel(months[0], true)} – ${monthLabel(months[5], true)}</span></div>
-        ${sixChart}
-      </section>
-      `;
+        <div class="kv"><span>Pagado</span><b>${fmt(budSpent)} <small>de ${fmt(budTotal)}</small></b></div>
+        ${progress(budSpent, budTotal)}
+      </section>` : '';
+
+    // 5. La meta que elijas (o la primera) + tus fondos en una línea
+    const homeGoal = goals.find(g => g.id === data.settings.homeGoal) || goals[0];
+    const funds = [res.emergency > 0 ? `🛟 Emergencia ${fmt(res.emergency)}` : '', res.savings > 0 ? `🌱 Ahorro ${fmt(res.savings)}` : ''].filter(Boolean).join(' · ');
+    const goalsCard = homeGoal || funds ? `<section class="card hgoal">
+        <div class="summary-head"><h3>${homeGoal ? (homeGoal.kind === 'deuda' ? 'Mi deuda' : 'Mi meta') : 'Mis fondos'}</h3><a href="#" data-tab="metas">${goals.length > 1 ? 'Cambiar' : 'Ver todo'}</a></div>
+        ${homeGoal ? goalRow(homeGoal, false) : ''}
+        ${funds ? `<p class="mnote">${funds}</p>` : ''}
+      </section>` : '';
+
+    return money + (isAdmin() ? weekCard() : monthlyPayCard()) + spendCard + budCard + goalsCard;
   },
 
   movimientos() {
@@ -1140,7 +1131,7 @@ const views = {
       `<button class="${ui.filter === f ? 'on' : ''}" data-action="filter" data-v="${f}">${{ todos: 'Todos', gasto: 'Gastos', ingreso: 'Ingresos' }[f]}</button>`).join('');
     const list = Object.entries(groups).map(([d, ts]) => `<h4 class="day">${dayLabel(d)}</h4>
       <ul class="txlist">${ts.map(txRow).join('')}</ul>`).join('');
-    return `<div class="seg">${seg}</div>${list || '<p class="empty">No hay movimientos este mes.<br>Toca + para agregar uno.</p>'}`;
+    return `<div class="seg">${seg}</div>${list || '<p class="empty">No hay movimientos este mes.<br>Toca + para agregar uno.</p>'}` + sixMonthsCard();
   },
 
   presupuesto() {
@@ -1169,7 +1160,10 @@ const views = {
   metas() {
     const goals = live(data.goals);
     return reservesCard() + `<div class="summary-head section-head"><h3>Metas y deudas</h3><button class="slink" data-action="new-goal">+ Nueva</button></div>
-      ${goals.length ? goals.map(g => `<section class="card">${goalRow(g, true)}</section>`).join('')
+      ${goals.length ? goals.map((g, i) => {
+        const on = (goals.find(x => x.id === data.settings.homeGoal) || goals[0]).id === g.id;
+        return `<section class="card">${goalRow(g, true)}<button type="button" class="pinhome ${on ? 'on' : ''}" data-action="home-goal" data-id="${g.id}" aria-pressed="${on}">${on ? '★ Se muestra en Inicio' : '☆ Mostrar en Inicio'}</button></section>`;
+      }).join('')
         : '<p class="empty">Crea una meta, como unas vacaciones, o registra una deuda.</p>'}`;
   },
 
@@ -1544,6 +1538,10 @@ document.addEventListener('click', e => {
     case 'new-tx': openTx(); break;
     case 'edit-name': ui.editName = !ui.editName; render(); if (ui.editName) setTimeout(() => { const i = $('#myName'); if (i) { i.focus(); i.select(); } }, 30); break;
     case 'toggle-pass': ui.passOpen = !ui.passOpen; render(); break;
+    case 'home-goal':
+      data.settings = Object.assign({}, data.settings, { homeGoal: el.dataset.id, updatedAt: now() });
+      commit(); toast('Se mostrará en Inicio');
+      break;
     case 'accent':
       data.settings = Object.assign({}, data.settings, { accentColor: el.dataset.v, updatedAt: now() });
       commit(); toast('Color: ' + (ACCENTS.find(a => a.key === el.dataset.v) || {}).name);
@@ -1700,8 +1698,11 @@ $('#accDelete').addEventListener('click', () => {
 $('#goalForm').addEventListener('submit', e => {
   e.preventDefault();
   const f = e.target;
+  const id = editingGoal?.id || uid();
+  // una meta nueva pasa a mostrarse en Inicio
+  if (!editingGoal) data.settings = Object.assign({}, data.settings, { homeGoal: id, updatedAt: now() });
   upsert('goals', {
-    id: editingGoal?.id || uid(), kind: f.kind.value, name: f.name.value.trim(),
+    id, kind: f.kind.value, name: f.name.value.trim(),
     target: parseAmount(f.target.value), current: parseAmount(f.current.value), deadline: f.deadline.value || '',
   });
   $('#goalDialog').close();
