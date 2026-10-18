@@ -1,7 +1,7 @@
 // Permite abrir la app sin conexión. Primero intenta la red (para recibir
 // actualizaciones) y si no hay conexión usa la copia guardada.
-const CACHE = 'finanzas-v51';
-const ASSETS = ['./', 'index.html', 'styles.css', 'manrope-variable.ttf', 'theme.js', 'app.js', 'manifest.webmanifest',
+const CACHE = 'finanzas-v52';
+const ASSETS = ['./', 'index.html', 'styles.css', 'manrope-variable.ttf', 'fraunces-title.woff', 'theme.js', 'app.js', 'manifest.webmanifest',
   'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'firebase-config.js'];
 
 self.addEventListener('install', e => {

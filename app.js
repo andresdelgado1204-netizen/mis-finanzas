@@ -530,9 +530,8 @@ const personName = (p, email) => (p && p.name && p.name.trim()) || nameFromEmail
 const myName = () => (cloud.user ? personName(cloud.profile, cloud.user.email) : '');
 function renderBrand() {
   const n = myName();
-  const title = n ? `Finanzas de ${n}` : 'Mis Finanzas';
-  $('.brand').textContent = title;
-  document.title = title;
+  $('.brand').textContent = n || 'Mis Finanzas';
+  document.title = n ? `Finanzas de ${n}` : 'Mis Finanzas';
 }
 
 const LS_PERSONAL = 'finanzas.modoPersonal';
@@ -832,6 +831,8 @@ function renderSyncStatus() {
   b.className = 'sync ' + kind;
   b.querySelector('span').textContent = msg;
   b.title = cloud.error || msg;
+  const st = $('#syncState');
+  if (st) { st.className = 'sstate ' + kind; st.querySelector('span').textContent = msg; }
   const det = $('#syncDetail');
   if (det) det.textContent = cloud.error ? '⚠️ ' + cloud.error
     : cloud.state === 'offline' ? 'Sin conexión: lo que anotes se guarda aquí y se sube solo cuando vuelva internet.'
@@ -1229,6 +1230,7 @@ const views = {
 
       <h4 class="sgroup">Tus datos</h4>
       <section class="card slist">
+        <button type="button" class="srow" data-action="sync"><span>Sincronización</span><span id="syncState" class="sstate"><i></i><span></span></span></button>
         <button type="button" class="srow chev" data-action="export-json"><span>Exportar respaldo</span></button>
         <button type="button" class="srow chev" data-action="export-csv"><span>Exportar movimientos (Excel/CSV)</span></button>
         <button type="button" class="srow chev" data-action="import-json"><span>Importar respaldo</span></button>

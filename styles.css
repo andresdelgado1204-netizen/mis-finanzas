@@ -729,3 +729,18 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 :root:not([data-theme="dark"]) .seg { background: #eef0f3; }
 :root:not([data-theme="dark"]) .reserve-grid > div { background: var(--accent-soft); }
 :root:not([data-theme="dark"]) .curchip { background: var(--accent-soft); }
+
+/* ===== Letra del título (Fraunces, licencia OFL) ===== */
+@font-face { font-family: "Fraunces Title"; src: url("fraunces-title.woff?v=1") format("woff"); font-weight: 400 900; font-display: swap; }
+.brand { font-family: "Fraunces Title", Georgia, "Times New Roman", serif; font-weight: 600; font-size: 1.7rem; line-height: 1.1; letter-spacing: -.015em; }
+@media (max-width: 420px) { .brand { font-size: 1.55rem; } }
+
+/* ===== Sincronización en Ajustes; fecha con la letra del título ===== */
+#syncBtn { display: none; }
+.top { min-height: 56px; }
+.sstate { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: .9rem; }
+.sstate i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.sstate.ok i { background: var(--pos); }
+.sstate.err i { background: var(--neg); }
+.sstate.busy i { background: var(--warn); animation: pulse 1s infinite; }
+.monthbar b { font-family: "Fraunces Title", Georgia, "Times New Roman", serif; font-weight: 600; font-size: 1.3rem; letter-spacing: -.01em; }
