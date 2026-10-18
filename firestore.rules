@@ -1,9 +1,36 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Cada persona solo puede leer y escribir sus propios datos
+
+    // Cuenta administradora (UID de Firebase Authentication)
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == 'QZUtAZZ7Jdac2LlAID4rDxv1jxg2';
+    }
+    // Usuario con la cuenta aprobada
+    function isActive() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.status == 'activo';
+    }
+
+    // Perfil de cada persona: correo, fechas y estado (pendiente / activo / bloqueado)
+    match /profiles/{userId} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+      // Al registrarse, cada persona crea su perfil SIEMPRE como pendiente
+      allow create: if isAdmin()
+        || (request.auth != null && request.auth.uid == userId
+            && request.resource.data.status == 'pendiente'
+            && request.resource.data.keys().hasOnly(['email', 'createdAt', 'lastSeen', 'status']));
+      // Cada persona solo puede actualizar su último uso y correo; el estado lo cambia el admin
+      allow update: if isAdmin()
+        || (request.auth != null && request.auth.uid == userId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen', 'email']));
+      allow delete: if isAdmin();
+    }
+
+    // Datos financieros: la persona dueña (si está aprobada) y el admin (solo lectura)
     match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == userId && isActive());
+      allow write: if request.auth != null && request.auth.uid == userId && (isAdmin() || isActive());
     }
   }
 }

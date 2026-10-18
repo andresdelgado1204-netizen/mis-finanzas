@@ -85,7 +85,7 @@ h4 { margin: 0; }
 /* Navegación: abajo en teléfono, arriba en pantallas grandes */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--card); border-top: 1px solid var(--line);
@@ -286,3 +286,31 @@ body.gated > .top, body.gated > .tabs, body.gated > #monthbar, body.gated > main
 .lockrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); margin-top: 12px; }
 .lockrow small { display: block; color: var(--muted); font-size: .85rem; margin-top: 2px; }
 .lockrow .btn { flex: none; }
+
+/* Administración */
+.tabs button { position: relative; }
+.badge {
+  position: absolute; top: 6px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--neg); color: #fff; font-size: .7rem; font-style: normal; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+@media (min-width: 800px) { .badge { position: static; margin-left: 4px; } }
+.urow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.uinfo { min-width: 0; flex: 1 1 220px; }
+.uinfo b { display: block; overflow-wrap: anywhere; }
+.uinfo small { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: .82rem; margin-top: 4px; }
+.uacts { display: flex; gap: 8px; flex-wrap: wrap; }
+.uacts .btn { padding: 8px 12px; font-size: .9rem; }
+.chip { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: .75rem; font-weight: 600; background: var(--line); color: var(--muted); }
+.chip.ok { background: color-mix(in srgb, var(--pos) 18%, transparent); color: var(--pos); }
+.chip.warn { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+.chip.bad { background: color-mix(in srgb, var(--neg) 18%, transparent); color: var(--neg); }
+.viewer { border-color: var(--accent); }
+.viewhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.viewhead h3 { margin: 0; overflow-wrap: anywhere; }
+.viewer .moneyhead { margin-top: 8px; }
+.ro li { cursor: default; }
+.authnote { font-size: .85rem; color: var(--muted); background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; margin: -2px 0 12px; }
+.statusicon { font-size: 2.6rem; margin-top: 16px; }
+.statustitle { margin: 6px 0 0; font-size: 1.15rem; }
+.authhint { font-size: .82rem; color: var(--muted); margin: -6px 0 12px; }

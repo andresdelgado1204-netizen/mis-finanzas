@@ -8,3 +8,6 @@ window.FIREBASE_CONFIG = {
   messagingSenderId: '927029674872',
   appId: '1:927029674872:web:7a3f46febbc43c112fbe8d',
 };
+
+// Cuenta administradora: puede aprobar, bloquear y ver la información de los demás.
+window.ADMIN_UID = 'QZUtAZZ7Jdac2LlAID4rDxv1jxg2'; // andresdelgado1204@gmail.com

@@ -26,6 +26,7 @@
     <button data-tab="movimientos"><span>🧾</span>Movimientos</button>
     <button data-tab="presupuesto"><span>📊</span>Presupuesto</button>
     <button data-tab="metas"><span>🎯</span>Metas</button>
+    <button data-tab="admin" id="adminTab" hidden><span>🛡️</span>Admin<i id="adminBadge" class="badge" hidden></i></button>
     <button data-tab="ajustes"><span>⚙️</span>Ajustes</button>
   </nav>
 
@@ -147,8 +148,10 @@
       <h1>Mis Finanzas</h1>
       <p class="gatesub" id="authTitle">Ingresa a tu cuenta</p>
       <form id="authForm" class="form" autocomplete="on">
-        <label>Correo<input id="authEmail" name="email" type="email" inputmode="email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required></label>
+        <label><span id="authUserLabel">Usuario o correo</span><input id="authEmail" name="email" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="andres" required></label>
+        <p id="authUserHint" class="authhint" hidden>Elige un usuario (por ejemplo <b>andres</b>). Se verá como <b>andres@finanzas</b>.</p>
         <label>Contraseña<input id="authPass" name="password" type="password" autocomplete="current-password" minlength="6" required></label>
+        <p id="authNotice" class="authnote" hidden>Tu cuenta quedará pendiente hasta que el administrador la apruebe. El administrador puede ver la información financiera que registres en la app.</p>
         <p id="authError" class="autherr" role="alert" hidden></p>
         <button class="btn wide" id="authSubmit">Ingresar</button>
       </form>
@@ -166,6 +169,19 @@
       <p class="gatesub" id="lockEmail"></p>
       <button type="button" class="btn wide big" data-action="unlock">Desbloquear con Face ID / huella</button>
       <button type="button" class="linkbtn" data-action="lock-password">Usar mi contraseña</button>
+    </div>
+  </div>
+
+  <!-- Estado de la cuenta: cargando, pendiente, bloqueada -->
+  <div id="statusScreen" class="gate" hidden>
+    <div class="gatebox">
+      <img src="icon-192.png" class="gatelogo" alt="" width="72" height="72">
+      <h1>Mis Finanzas</h1>
+      <p class="gatesub" id="statusEmail"></p>
+      <div class="statusicon" id="statusIcon">⏳</div>
+      <h2 class="statustitle" id="statusTitle"></h2>
+      <p class="gatesub" id="statusMsg"></p>
+      <button type="button" class="linkbtn" data-action="logout-now">Cerrar sesión</button>
     </div>
   </div>
 

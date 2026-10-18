@@ -251,15 +251,77 @@ function cloudInit() {
   cloud.auth.onAuthStateChanged(u => (u ? onLogin(u) : onLogout()));
 }
 
+const isAdmin = () => !!(cloud.user && window.ADMIN_UID && cloud.user.uid === window.ADMIN_UID);
+/* ---------- usuarios tipo "andres@finanzas" ----------
+   Quien no usa correo elige un nombre de usuario. Por dentro se guarda con
+   una dirección del propio proyecto Firebase (nadie más la controla). */
+const USER_DOMAIN = () => ((window.FIREBASE_CONFIG && FIREBASE_CONFIG.authDomain) || 'finanzas.local').toLowerCase();
+const USER_RE = /^[a-z0-9](?:[a-z0-9._-]{1,28}[a-z0-9])?$/;
+function toLoginEmail(input) {
+  const v = String(input || '').trim().toLowerCase();
+  return v.includes('@') ? v : v + '@' + USER_DOMAIN();
+}
+const isUsernameAccount = email => String(email || '').toLowerCase().endsWith('@' + USER_DOMAIN());
+function shownName(email) {
+  const e = String(email || '');
+  return isUsernameAccount(e) ? e.slice(0, e.lastIndexOf('@')) + '@finanzas' : e;
+}
+
+const LS_PERSONAL = 'finanzas.modoPersonal';
+const personalMode = () => { try { return localStorage.getItem(LS_PERSONAL) === '1'; } catch { return false; } };
+function setPersonalMode(on) {
+  try { on ? localStorage.setItem(LS_PERSONAL, '1') : localStorage.removeItem(LS_PERSONAL); } catch { }
+  ui.viewing = null;
+  if (on && ui.tab === 'admin') ui.tab = 'inicio';
+  render();
+  toast(on ? 'Modo personal: solo ves tus finanzas' : 'Panel de administración visible');
+}
+const showAdmin = () => isAdmin() && !personalMode();
+const profileRef = uid => cloud.db.collection('profiles').doc(uid);
+
 function onLogin(u) {
   if (cloud.user && cloud.user.uid === u.uid) return;
   cloud.user = u;
   cloud.known = {}; cloud.server = new Set();
+  cloud.status = null; cloud.seenSet = false; cloud.users = [];
   data = normalize(readJSON(userKey()));
   if (startMonth() > ui.month) ui.month = startMonth();
   unlocked = !lockInfo();
-  showScreen(unlocked ? 'app' : 'lock');
-  render();
+  setStatusScreen('loading');
+  // El perfil dice si la cuenta está aprobada, pendiente o bloqueada
+  cloud.profileUnsub = profileRef(u.uid).onSnapshot({ includeMetadataChanges: true },
+    doc => onProfile(doc), err => { setStatusScreen('error', cloudErr(err)); });
+}
+
+function onProfile(doc) {
+  if (!doc.exists) {
+    if (doc.metadata.fromCache) return; // esperar respuesta del servidor
+    const t = now();
+    profileRef(cloud.user.uid).set({ email: cloud.user.email, createdAt: t, lastSeen: t, status: isAdmin() ? 'activo' : 'pendiente' })
+      .catch(err => setStatusScreen('error', cloudErr(err)));
+    return;
+  }
+  const p = doc.data();
+  if (!cloud.seenSet && !doc.metadata.fromCache) {
+    cloud.seenSet = true;
+    profileRef(cloud.user.uid).update({ lastSeen: now(), email: cloud.user.email }).catch(() => { });
+  }
+  if (p.status === cloud.status) return;
+  cloud.status = p.status;
+  if (p.status === 'activo') {
+    startData();
+    if (isAdmin()) startAdmin();
+    showScreen(unlocked ? 'app' : 'lock');
+    render();
+  } else {
+    stopData();
+    if (p.status === 'bloqueado') { try { localStorage.removeItem(userKey()); } catch { } data = normalize(null); }
+    setStatusScreen(p.status === 'bloqueado' ? 'blocked' : 'pending');
+  }
+}
+
+function startData() {
+  if (cloud.unsubs.length) return;
   setCloud('connecting');
   const base = userDoc();
   for (const list of LISTS) {
@@ -269,12 +331,77 @@ function onLogin(u) {
   cloud.unsubs.push(base.collection('meta').doc('settings').onSnapshot({ includeMetadataChanges: true },
     doc => onSettingsSnap(doc), err => setCloud('error', cloudErr(err))));
 }
+function stopData() {
+  cloud.unsubs.forEach(f => { try { f(); } catch { } });
+  cloud.unsubs = []; cloud.known = {}; cloud.server = new Set();
+}
 
 function onLogout() {
-  cloud.unsubs.forEach(f => { try { f(); } catch { } });
-  cloud.unsubs = []; cloud.user = null; cloud.known = {}; cloud.server = new Set();
+  stopData();
+  if (cloud.profileUnsub) { try { cloud.profileUnsub(); } catch { } cloud.profileUnsub = null; }
+  cloud.user = null; cloud.status = null; cloud.users = []; ui.viewing = null;
+  if (ui.tab === 'admin') ui.tab = 'inicio';
   data = normalize(null);
   showScreen('auth');
+}
+
+/* ---------- administración ---------- */
+function startAdmin() {
+  cloud.unsubs.push(cloud.db.collection('profiles').onSnapshot(snap => {
+    cloud.users = snap.docs.map(d => Object.assign({ uid: d.id }, d.data()));
+    const pend = cloud.users.filter(u => u.status === 'pendiente').length;
+    $('#adminBadge').textContent = pend || '';
+    $('#adminBadge').hidden = !pend;
+    if (ui.tab === 'admin' && !userIsTyping()) render();
+  }, err => toast(cloudErr(err))));
+}
+function setUserStatus(uid, status) {
+  return profileRef(uid).update({ status, reviewedAt: now() })
+    .then(() => toast(status === 'activo' ? 'Cuenta activada' : 'Cuenta bloqueada'))
+    .catch(err => toast(cloudErr(err)));
+}
+async function loadUserData(uid) {
+  const base = cloud.db.collection('users').doc(uid);
+  const d = { settings: null };
+  for (const list of LISTS) d[list] = (await base.collection(list).get()).docs.map(x => x.data());
+  const st = await base.collection('meta').doc('settings').get();
+  if (st.exists) d.settings = st.data(); else delete d.settings;
+  return normalize(d);
+}
+function withData(d, fn) { const old = data; data = d; try { return fn(); } finally { data = old; } }
+const fmtDay = ts => (ts ? new Date(ts).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+function agoText(ts) {
+  if (!ts) return 'nunca';
+  const m = Math.round((now() - ts) / 60000);
+  if (m < 2) return 'ahora';
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.round(h / 24);
+  return d === 1 ? 'ayer' : `hace ${d} días`;
+}
+const STATUS = { activo: ['Activa', 'ok'], pendiente: ['Pendiente', 'warn'], bloqueado: ['Bloqueada', 'bad'] };
+
+function viewerHTML() {
+  const v = ui.viewing;
+  if (!v) return '';
+  if (!v.data) return `<section class="card viewer"><div class="viewhead"><h3>${esc(shownName(v.email))}</h3><button class="btn ghost" data-action="adm-close">Cerrar</button></div><p class="muted">${v.error ? '⚠️ ' + esc(v.error) : 'Cargando sus datos…'}</p></section>`;
+  return withData(v.data, () => {
+    const bal = balances(), accs = accounts();
+    const total = accs.reduce((t, a) => t + (bal[a.id] || 0), 0);
+    const { inc, exp, bal: net } = totals(ui.month);
+    const txs = live(data.transactions).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 25);
+    const rows = txs.map(t => txRow(t).replace(/data-action="edit-tx" data-id="[^"]*"/, '')).join('');
+    return `<section class="card viewer">
+      <div class="viewhead"><div><h3>${esc(shownName(v.email))}</h3><span class="muted">Solo lectura</span></div><button class="btn ghost" data-action="adm-close">Cerrar</button></div>
+      <div class="moneyhead"><span>Dinero total</span><b class="${total < 0 ? 'neg' : ''}">${fmt(total)}</b></div>
+      <ul class="acclist ro">${accs.map(a => `<li><span class="accicon">${accIcon(a)}</span><span class="accname">${esc(a.name)}</span><b>${fmt(bal[a.id] || 0)}</b></li>`).join('')}</ul>
+      <div class="weekgrid"><div><small>Ingresos ${monthLabel(ui.month).split(' ')[0]}</small><b class="pos">${fmt(inc)}</b></div>
+        <div><small>Gastos</small><b class="neg">${fmt(exp)}</b></div><div><small>Balance</small><b class="${net >= 0 ? 'pos' : 'neg'}">${fmt(net)}</b></div></div>
+      <h4 class="day">Últimos movimientos</h4>
+      ${rows ? `<ul class="txlist ro">${rows}</ul>` : '<p class="muted">Todavía no registra movimientos.</p>'}
+    </section>`;
+  });
 }
 
 function applyRemote(list, item) {
@@ -370,10 +497,23 @@ window.addEventListener('offline', () => { if (cloud.user) setCloud('offline'); 
 
 /* ---------- pantallas: ingreso, bloqueo, configuración ---------- */
 function showScreen(name) {
-  for (const n of ['auth', 'lock', 'setup']) { const el = $('#' + n + 'Screen'); if (el) el.hidden = n !== name; }
+  for (const n of ['auth', 'lock', 'setup', 'status']) { const el = $('#' + n + 'Screen'); if (el) el.hidden = n !== name; }
   document.body.classList.toggle('gated', name !== 'app');
-  if (name === 'lock') $('#lockEmail').textContent = cloud.user ? cloud.user.email : '';
+  if (name === 'lock') $('#lockEmail').textContent = cloud.user ? shownName(cloud.user.email) : '';
   if (name === 'auth') setAuthMode(authMode);
+}
+function setStatusScreen(kind, err) {
+  const t = {
+    loading: ['⏳', 'Cargando tu cuenta…', 'Un momento.'],
+    pending: ['🕓', 'Tu cuenta está esperando aprobación', 'El administrador debe aprobarla antes de que puedas usar la app. Esta pantalla se actualiza sola cuando te aprueben.'],
+    blocked: ['🔒', 'Tu cuenta está bloqueada', 'No tienes acceso a la app. Si crees que es un error, habla con el administrador.'],
+    error: ['⚠️', 'No se pudo cargar tu cuenta', err || 'Revisa tu conexión a internet e intenta de nuevo.'],
+  }[kind];
+  $('#statusIcon').textContent = t[0];
+  $('#statusTitle').textContent = t[1];
+  $('#statusMsg').textContent = t[2];
+  $('#statusEmail').textContent = cloud.user ? shownName(cloud.user.email) : '';
+  showScreen('status');
 }
 let authMode = 'login'; // login | signup | reauth
 function setAuthMode(m) {
@@ -387,18 +527,21 @@ function setAuthMode(m) {
   $('#authToggle').textContent = signup ? '¿Ya tienes cuenta? Ingresa' : '¿No tienes cuenta? Crea una';
   $('#authReset').hidden = signup;
   $('#authOther').hidden = m !== 'reauth';
-  if (m === 'reauth' && cloud.user) f.email.value = cloud.user.email;
+  $('#authNotice').hidden = !signup;
+  $('#authUserHint').hidden = !signup;
+  $('#authUserLabel').textContent = signup ? 'Usuario' : 'Usuario o correo';
+  if (m === 'reauth' && cloud.user) f.email.value = isUsernameAccount(cloud.user.email) ? shownName(cloud.user.email).replace('@finanzas', '') : cloud.user.email;
   $('#authError').hidden = true;
 }
 function authErr(err) {
   const c = (err && err.code) || '';
   const msgs = {
-    'auth/invalid-email': 'El correo no es válido.',
-    'auth/user-not-found': 'Correo o contraseña incorrectos.',
-    'auth/wrong-password': 'Correo o contraseña incorrectos.',
-    'auth/invalid-credential': 'Correo o contraseña incorrectos.',
-    'auth/invalid-login-credentials': 'Correo o contraseña incorrectos.',
-    'auth/email-already-in-use': 'Ya existe una cuenta con ese correo. Ingresa con tu contraseña.',
+    'auth/invalid-email': 'Usuario o correo no válido. El usuario puede tener letras, números, punto, guion o guion bajo.',
+    'auth/user-not-found': 'Usuario o contraseña incorrectos.',
+    'auth/wrong-password': 'Usuario o contraseña incorrectos.',
+    'auth/invalid-credential': 'Usuario o contraseña incorrectos.',
+    'auth/invalid-login-credentials': 'Usuario o contraseña incorrectos.',
+    'auth/email-already-in-use': 'Ese usuario ya existe. Elige otro o ingresa con tu contraseña.',
     'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
     'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos y vuelve a intentar.',
     'auth/network-request-failed': 'Sin conexión a internet. Revisa tu conexión e intenta de nuevo.',
@@ -425,7 +568,7 @@ async function enableLock() {
   try {
     const cred = await navigator.credentials.create({ publicKey: {
       rp: { name: 'Mis Finanzas' },
-      user: { id: rand(16), name: cloud.user.email, displayName: cloud.user.email },
+      user: { id: rand(16), name: shownName(cloud.user.email), displayName: shownName(cloud.user.email) },
       challenge: rand(32),
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
       authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
@@ -489,6 +632,31 @@ function goalRow(g, full) {
 }
 
 const views = {
+  admin() {
+    if (!isAdmin()) return '<p class="empty">Solo para el administrador.</p>';
+    const order = { pendiente: 0, activo: 1, bloqueado: 2 };
+    const users = [...cloud.users].sort((a, b) => (order[a.status] - order[b.status]) || (b.createdAt || 0) - (a.createdAt || 0));
+    const pend = users.filter(u => u.status === 'pendiente');
+    const others = users.filter(u => u.status !== 'pendiente');
+    const me = cloud.user.uid;
+    const pendHTML = pend.length ? `<section class="card"><h3>Por aprobar (${pend.length})</h3>
+      ${pend.map(u => `<div class="urow">
+        <div class="uinfo"><b>${esc(shownName(u.email))}</b><small>Se registró el ${fmtDay(u.createdAt)}</small></div>
+        <div class="uacts"><button class="btn ghost danger" data-action="adm-reject" data-id="${u.uid}">Rechazar</button>
+        <button class="btn" data-action="adm-approve" data-id="${u.uid}">Aprobar</button></div></div>`).join('')}
+      </section>` : '';
+    const listHTML = `<section class="card"><h3>Usuarios (${others.length})</h3>
+      ${others.map(u => { const [lbl, cls] = STATUS[u.status] || ['—', '']; const self = u.uid === me; return `<div class="urow">
+        <div class="uinfo"><b>${esc(shownName(u.email))}${self ? ' <span class="chip">Tú · admin</span>' : ''}</b>
+          <small><span class="chip ${cls}">${lbl}</span> Registro ${fmtDay(u.createdAt)} · Último uso ${agoText(u.lastSeen)}</small></div>
+        <div class="uacts">${self ? '' : `<button class="btn ghost" data-action="adm-view" data-id="${u.uid}">Ver finanzas</button>
+          ${u.status === 'bloqueado' ? `<button class="btn ghost" data-action="adm-unblock" data-id="${u.uid}">Desbloquear</button>`
+            : `<button class="btn ghost danger" data-action="adm-block" data-id="${u.uid}">Bloquear</button>`}`}</div></div>`; }).join('') || '<p class="muted">Aún no hay usuarios.</p>'}
+      </section>`;
+    const top = `<div class="row-end" style="margin:0 0 14px"><button class="btn ghost" data-action="personal-on">👤 Ver solo mis finanzas</button></div>`;
+    return top + viewerHTML() + pendHTML + listHTML;
+  },
+
   inicio() {
     const { inc, exp, bal } = totals(ui.month);
     const byCat = Object.entries(spentByCat(ui.month)).sort((a, b) => b[1] - a[1]);
@@ -585,13 +753,18 @@ const views = {
     const c = data.settings.categories;
     return `
       <section class="card"><h3>Tu cuenta</h3>
-        <p class="acctline">${window.PREVIEW ? 'Vista previa (sin cuenta)' : `Ingresaste como <b>${esc(cloud.user ? cloud.user.email : '')}</b>`}</p>
+        <p class="acctline">${window.PREVIEW ? 'Vista previa (sin cuenta)' : `Ingresaste como <b>${esc(cloud.user ? shownName(cloud.user.email) : '')}</b>`}</p>
         <p id="syncDetail" class="muted"></p>
         <div class="lockrow">
           <div><b>Bloqueo con Face ID / huella</b>
             <small>${lockInfo() ? 'Activado en este dispositivo. Se pide al abrir la app.' : 'Pide Face ID, Touch ID o tu huella al abrir la app en este dispositivo.'}</small></div>
           <button class="btn ${lockInfo() ? 'ghost' : ''}" data-action="lock-toggle">${lockInfo() ? 'Desactivar' : 'Activar'}</button>
         </div>
+        ${isAdmin() ? `<div class="lockrow">
+          <div><b>Modo personal</b>
+            <small>${personalMode() ? 'Activado: solo ves tus finanzas. La pestaña Admin está oculta.' : 'Oculta la pestaña Admin para ver solo tus finanzas.'}</small></div>
+          <button class="btn ${personalMode() ? '' : 'ghost'}" data-action="${personalMode() ? 'personal-off' : 'personal-on'}">${personalMode() ? 'Mostrar Admin' : 'Activar'}</button>
+        </div>` : ''}
         <div class="row-end"><button class="btn ghost danger" data-action="logout">Cerrar sesión</button></div>
       </section>
 
@@ -608,6 +781,8 @@ const views = {
 };
 
 function render() {
+  $('#adminTab').hidden = !showAdmin();
+  if (ui.tab === 'admin' && !showAdmin()) ui.tab = 'inicio';
   document.querySelectorAll('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === ui.tab));
   $('#monthbar').hidden = !['inicio', 'movimientos', 'presupuesto'].includes(ui.tab);
   $('#monthLabel').textContent = monthLabel(ui.month);
@@ -788,9 +963,12 @@ document.addEventListener('click', e => {
     case 'sync': toast(cloud.error || (cloud.state === 'ok' ? 'Tus datos están al día en todos tus dispositivos' : 'Sincronizando…')); break;
     case 'auth-toggle': setAuthMode(authMode === 'signup' ? 'login' : 'signup'); break;
     case 'auth-reset': {
-      const email = $('#authForm').email.value.trim();
-      if (!email) { showAuthError('Escribe tu correo arriba y vuelve a tocar "Olvidé mi contraseña".'); break; }
-      cloud.auth.sendPasswordResetEmail(email)
+      const raw = $('#authForm').email.value.trim();
+      if (!raw) { showAuthError('Escribe tu correo arriba y vuelve a tocar "Olvidé mi contraseña".'); break; }
+      if (!raw.includes('@') || isUsernameAccount(raw)) {
+        showAuthError('Las cuentas con usuario no pueden recuperar la contraseña por correo. Pide ayuda al administrador.'); break;
+      }
+      cloud.auth.sendPasswordResetEmail(raw)
         .then(() => toast('Te enviamos un correo para cambiar tu contraseña'))
         .catch(err => showAuthError(authErr(err)));
       break;
@@ -799,6 +977,29 @@ document.addEventListener('click', e => {
     case 'unlock': unlock(); break;
     case 'lock-password': setAuthMode('reauth'); showScreen('auth'); break;
     case 'lock-toggle': if (lockInfo()) disableLock(); else enableLock(); break;
+    case 'logout-now':
+      try { localStorage.removeItem(userKey()); } catch { }
+      cloud.auth.signOut(); break;
+    case 'adm-approve': setUserStatus(id, 'activo'); break;
+    case 'adm-unblock': setUserStatus(id, 'activo'); break;
+    case 'adm-reject':
+    case 'adm-block': {
+      const u = cloud.users.find(x => x.uid === id);
+      ask(`¿${el.dataset.action === 'adm-reject' ? 'Rechazar' : 'Bloquear'} la cuenta de ${u ? shownName(u.email) : 'este usuario'}? No podrá usar la app hasta que la desbloquees.`, el.dataset.action === 'adm-reject' ? 'Rechazar' : 'Bloquear')
+        .then(ok => { if (ok) { if (ui.viewing && ui.viewing.uid === id) ui.viewing = null; setUserStatus(id, 'bloqueado'); } });
+      break;
+    }
+    case 'adm-view': {
+      const u = cloud.users.find(x => x.uid === id);
+      ui.viewing = { uid: id, email: u ? u.email : '', data: null };
+      render(); window.scrollTo(0, 0);
+      loadUserData(id).then(d => { if (ui.viewing && ui.viewing.uid === id) { ui.viewing.data = d; render(); } })
+        .catch(err => { if (ui.viewing) { ui.viewing.error = cloudErr(err); render(); } });
+      break;
+    }
+    case 'adm-close': ui.viewing = null; render(); break;
+    case 'personal-on': setPersonalMode(true); break;
+    case 'personal-off': setPersonalMode(false); ui.tab = 'admin'; render(); break;
     case 'logout':
       ask('¿Cerrar sesión en este dispositivo? Tus datos quedan guardados en tu cuenta.', 'Cerrar sesión').then(ok => {
         if (!ok) return;
@@ -973,7 +1174,12 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'authForm') {
     e.preventDefault();
     const f = e.target;
-    const email = f.email.value.trim(), pass = f.password.value;
+    const raw = f.email.value.trim(), pass = f.password.value;
+    if (!raw.includes('@') && !USER_RE.test(raw.toLowerCase())) {
+      showAuthError('El usuario debe tener entre 2 y 30 caracteres: letras, números, punto, guion o guion bajo (sin espacios ni tildes).');
+      return;
+    }
+    const email = toLoginEmail(raw);
     const btn = $('#authSubmit');
     btn.disabled = true;
     const done = () => { btn.disabled = false; };
@@ -983,7 +1189,7 @@ document.addEventListener('submit', e => {
         .catch(err => showAuthError(authErr(err))).finally(done);
     } else if (authMode === 'signup') {
       cloud.auth.createUserWithEmailAndPassword(email, pass)
-        .then(() => { f.password.value = ''; toast('¡Cuenta creada!'); })
+        .then(() => { f.password.value = ''; toast('¡Cuenta creada!'); setAuthMode('login'); })
         .catch(err => showAuthError(authErr(err))).finally(done);
     } else {
       cloud.auth.signInWithEmailAndPassword(email, pass)

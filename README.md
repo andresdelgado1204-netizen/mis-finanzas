@@ -13,6 +13,13 @@ App de finanzas personales para iPhone, iPad y Mac. Se instala desde el navegado
 - Registro desde noviembre de 2026
 - Funciona sin internet y se sincroniza cuando vuelve la conexión
 
+## Cuentas y administración
+
+- **Administrador:** andresdelgado1204@gmail.com. Tiene la pestaña **Admin** para aprobar o rechazar cuentas nuevas, bloquear o desbloquear, y ver las finanzas de cada persona (solo lectura). Con **Modo personal** (en Ajustes) se oculta la pestaña Admin y solo ve sus propias finanzas.
+- **Demás personas:** crean su cuenta con un **usuario** (por ejemplo `maria`, que se muestra como `maria@finanzas`). La cuenta queda **pendiente** hasta que el admin la apruebe. Al registrarse ven un aviso de que el administrador puede ver su información.
+- Las cuentas con usuario no tienen "Olvidé mi contraseña"; si alguien la olvida, crea una cuenta nueva y el admin la aprueba.
+- El administrador está definido por su UID en `firestore.rules` y `firebase-config.js`.
+
 ## Ingreso y seguridad
 
 - Cuenta con **correo y contraseña** (Firebase Authentication). El iPhone y el Mac ofrecen guardar la contraseña en el llavero y la rellenan con Face ID / Touch ID.
