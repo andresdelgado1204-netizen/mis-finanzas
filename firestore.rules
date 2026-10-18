@@ -20,11 +20,11 @@ service cloud.firestore {
       allow create: if isAdmin()
         || (request.auth != null && request.auth.uid == userId
             && request.resource.data.status == 'activo'
-            && request.resource.data.keys().hasOnly(['email', 'createdAt', 'lastSeen', 'status']));
-      // Cada persona solo puede actualizar su último uso y correo; el estado lo cambia el admin
+            && request.resource.data.keys().hasOnly(['email', 'name', 'createdAt', 'lastSeen', 'status']));
+      // Cada persona solo puede actualizar su nombre, último uso y correo; el estado lo cambia el admin
       allow update: if isAdmin()
         || (request.auth != null && request.auth.uid == userId
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen', 'email']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen', 'email', 'name']));
       allow delete: if isAdmin();
     }
 

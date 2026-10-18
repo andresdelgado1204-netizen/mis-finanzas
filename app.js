@@ -266,6 +266,19 @@ function shownName(email) {
   return isUsernameAccount(e) ? e.slice(0, e.lastIndexOf('@')) + '@finanzas' : e;
 }
 
+function nameFromEmail(email) {
+  const local = String(email || '').split('@')[0];
+  return local.split(/[._\-]+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(' ') || 'Mis';
+}
+const personName = (p, email) => (p && p.name && p.name.trim()) || nameFromEmail(email);
+const myName = () => (cloud.user ? personName(cloud.profile, cloud.user.email) : '');
+function renderBrand() {
+  const n = myName();
+  const title = n ? `Finanzas de ${n}` : 'Mis Finanzas';
+  $('.brand').textContent = title;
+  document.title = title;
+}
+
 const LS_PERSONAL = 'finanzas.modoPersonal';
 const personalMode = () => { try { return localStorage.getItem(LS_PERSONAL) === '1'; } catch { return false; } };
 function setPersonalMode(on) {
@@ -305,7 +318,7 @@ function onProfile(doc) {
   if (!doc.exists) {
     if (doc.metadata.fromCache) return; // esperar respuesta del servidor
     const t = now();
-    profileRef(cloud.user.uid).set({ email: cloud.user.email, createdAt: t, lastSeen: t, status: 'activo' })
+    profileRef(cloud.user.uid).set({ email: cloud.user.email, name: nameFromEmail(cloud.user.email), createdAt: t, lastSeen: t, status: 'activo' })
       .catch(() => setTimeout(() => { if (cloud.user && cloud.profileUnsub) { cloud.profileUnsub(); cloud.profileUnsub = null; watchProfile(); } }, 3000));
     return;
   }
@@ -315,7 +328,9 @@ function onProfile(doc) {
     cloud.seenSet = true;
     profileRef(cloud.user.uid).update({ lastSeen: now(), email: cloud.user.email }).catch(() => { });
   }
-  if (p.status === cloud.status) return;
+  cloud.profile = p;
+  renderBrand();
+  if (p.status === cloud.status) { if (ui.tab === 'ajustes' && !userIsTyping()) render(); return; }
   cloud.status = p.status;
   if (p.status === 'activo') {
     startData();
@@ -359,6 +374,7 @@ function stopData() {
 }
 
 function onLogout() {
+  cloud.profile = null; renderBrand();
   stopData();
   if (cloud.profileUnsub) { try { cloud.profileUnsub(); } catch { } cloud.profileUnsub = null; }
   if (cloud.adminUnsub) { try { cloud.adminUnsub(); } catch { } cloud.adminUnsub = null; }
@@ -390,6 +406,21 @@ async function createPerson(raw, pass) {
   try { await secAuth.signOut(); } catch { }
   await profileRef(uid).set({ email, createdAt: now(), lastSeen: 0, status: 'activo', createdBy: cloud.user.uid });
   return { uid, email };
+}
+
+function openNameDialog(uid, current, email) {
+  const f = $('#nameForm');
+  f.reset(); f.uid.value = uid; f.name.value = current;
+  $('#nameFor').textContent = email;
+  $('#nameDialog').showModal();
+  setTimeout(() => { f.name.focus(); f.name.select(); }, 50);
+}
+function saveName(uid, name) {
+  name = name.trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (!name) { toast('Escribe un nombre'); return Promise.resolve(false); }
+  return profileRef(uid).update({ name })
+    .then(() => { toast('Nombre guardado'); return true; })
+    .catch(() => { toast('No se pudo guardar el nombre. Intenta de nuevo.'); return false; });
 }
 
 function setUserStatus(uid, status) {
@@ -425,7 +456,7 @@ const STATUS = { activo: ['Activa', 'ok'], pendiente: ['Pendiente', 'warn'], blo
 function viewerHTML() {
   const v = ui.viewing;
   if (!v) return '';
-  if (!v.data) return `<section class="card viewer"><div class="viewhead"><h3>${esc(shownName(v.email))}</h3><button class="btn ghost" data-action="adm-close">Cerrar</button></div><p class="muted">${v.error ? '⚠️ ' + esc(v.error) : 'Cargando sus datos…'}</p></section>`;
+  if (!v.data) return `<section class="card viewer"><div class="viewhead"><h3>${esc(v.name || shownName(v.email))}</h3><button class="btn ghost" data-action="adm-close">Cerrar</button></div><p class="muted">${v.error ? '⚠️ ' + esc(v.error) : 'Cargando sus datos…'}</p></section>`;
   return withData(v.data, () => {
     const bal = balances(), accs = accounts();
     const total = accs.reduce((t, a) => t + (bal[a.id] || 0), 0);
@@ -433,7 +464,7 @@ function viewerHTML() {
     const txs = live(data.transactions).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 25);
     const rows = txs.map(t => txRow(t).replace(/data-action="edit-tx" data-id="[^"]*"/, '')).join('');
     return `<section class="card viewer">
-      <div class="viewhead"><div><h3>${esc(shownName(v.email))}</h3><span class="muted">Solo lectura</span></div><button class="btn ghost" data-action="adm-close">Cerrar</button></div>
+      <div class="viewhead"><div><h3>${esc(v.name || shownName(v.email))}</h3><span class="muted">Solo lectura</span></div><button class="btn ghost" data-action="adm-close">Cerrar</button></div>
       <div class="moneyhead"><span>Dinero total</span><b class="${total < 0 ? 'neg' : ''}">${fmt(total)}</b></div>
       <ul class="acclist ro">${accs.map(a => `<li><span class="accicon">${accIcon(a)}</span><span class="accname">${esc(a.name)}</span><b>${fmt(bal[a.id] || 0)}</b></li>`).join('')}</ul>
       <div class="weekgrid"><div><small>Ingresos ${monthLabel(ui.month).split(' ')[0]}</small><b class="pos">${fmt(inc)}</b></div>
@@ -710,9 +741,10 @@ const views = {
       </section>` : '';
     const listHTML = `<section class="card"><h3>Usuarios (${others.length})</h3>
       ${others.map(u => { const [lbl, cls] = STATUS[u.status] || ['—', '']; const self = u.uid === me; return `<div class="urow">
-        <div class="uinfo"><b>${esc(shownName(u.email))}${self ? ' <span class="chip">Tú · admin</span>' : ''}</b>
+        <div class="uinfo"><b>${esc(personName(u, u.email))}${self ? ' <span class="chip">Tú · admin</span>' : ''}</b>
+          <small>${esc(shownName(u.email))}</small>
           <small><span class="chip ${cls}">${lbl}</span> Registro ${fmtDay(u.createdAt)} · Último uso ${agoText(u.lastSeen)}</small></div>
-        <div class="uacts">${self ? '' : `<button class="btn ghost" data-action="adm-view" data-id="${u.uid}">Ver finanzas</button>
+        <div class="uacts"><button class="btn ghost" data-action="adm-name" data-id="${u.uid}">Nombre</button>${self ? '' : `<button class="btn ghost" data-action="adm-view" data-id="${u.uid}">Ver finanzas</button>
           ${u.status === 'bloqueado' ? `<button class="btn ghost" data-action="adm-unblock" data-id="${u.uid}">Desbloquear</button>`
             : `<button class="btn ghost danger" data-action="adm-block" data-id="${u.uid}">Bloquear</button>`}`}</div></div>`; }).join('') || '<p class="muted">Aún no hay usuarios.</p>'}
       </section>`;
@@ -834,6 +866,10 @@ const views = {
     return `
       <section class="card"><h3>Tu cuenta</h3>
         <p class="acctline">${window.PREVIEW ? 'Vista previa (sin cuenta)' : `Ingresaste como <b>${esc(cloud.user ? shownName(cloud.user.email) : '')}</b>`}</p>
+        ${window.PREVIEW ? '' : `<form id="myNameForm" class="form namerow">
+          <label>Tu nombre<input name="name" maxlength="40" value="${esc(myName())}" autocomplete="name" required></label>
+          <button class="btn ghost">Guardar</button>
+        </form>`}
         <p id="syncDetail" class="muted"></p>
         <div class="lockrow">
           <div><b>Entrar con Face ID / huella</b>
@@ -872,6 +908,7 @@ const views = {
 };
 
 function render() {
+  renderBrand();
   $('#adminTab').hidden = !showAdmin();
   if (ui.tab === 'admin' && !showAdmin()) ui.tab = 'inicio';
   document.querySelectorAll('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === ui.tab));
@@ -1088,13 +1125,18 @@ document.addEventListener('click', e => {
     }
     case 'adm-view': {
       const u = cloud.users.find(x => x.uid === id);
-      ui.viewing = { uid: id, email: u ? u.email : '', data: null };
+      ui.viewing = { uid: id, email: u ? u.email : '', name: u ? personName(u, u.email) : '', data: null };
       render(); window.scrollTo(0, 0);
       loadUserData(id).then(d => { if (ui.viewing && ui.viewing.uid === id) { ui.viewing.data = d; render(); } })
         .catch(err => { if (ui.viewing) { ui.viewing.error = cloudErr(err); render(); } });
       break;
     }
     case 'adm-close': ui.viewing = null; render(); break;
+    case 'adm-name': {
+      const u = cloud.users.find(x => x.uid === id);
+      openNameDialog(id, u ? personName(u, u.email) : '', u ? shownName(u.email) : '');
+      break;
+    }
     case 'adm-copy-link':
       if (navigator.clipboard) navigator.clipboard.writeText(APP_URL).then(() => toast('Enlace copiado')).catch(() => toast(APP_URL));
       else toast(APP_URL);
@@ -1291,6 +1333,18 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'myNameForm') {
+    e.preventDefault();
+    saveName(cloud.user.uid, e.target.name.value);
+    e.target.name.blur();
+    return;
+  }
+  if (e.target.id === 'nameForm') {
+    e.preventDefault();
+    const f = e.target;
+    saveName(f.uid.value, f.name.value).then(ok => { if (ok) $('#nameDialog').close(); });
+    return;
+  }
   if (e.target.id === 'adminAddForm') {
     e.preventDefault();
     const f = e.target, raw = f.user.value.trim(), pass = f.pass.value;

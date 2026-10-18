@@ -328,3 +328,8 @@ body.gated > .top, body.gated > .tabs, body.gated > #monthbar, body.gated > main
 #authSubmit { margin-top: 4px; }
 .steps { margin: 0 0 4px; padding-left: 20px; display: grid; gap: 6px; font-size: .92rem; }
 a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+.namerow { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
+.namerow label { flex: 1; margin-bottom: 0; }
+.namerow .btn { flex: none; }
+.uinfo small + small { margin-top: 2px; }
+.brand { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
