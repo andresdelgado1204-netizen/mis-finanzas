@@ -943,14 +943,22 @@ const views = {
       : '<p class="empty" style="flex:1">Sin gastos este mes.</p>';
 
     // 6 meses terminando en el mes elegido, pero nunca antes del mes de inicio
-    let first = shiftMonth(ui.month, -5);
-    if (startMonth() && first < startMonth()) first = startMonth();
+    const first = shiftMonth(ui.month, -5);
     const months = [...Array(6)].map((_, i) => shiftMonth(first, i));
     const series = months.map(m => ({ m, ...totals(m) }));
-    const max = Math.max(1, ...series.flatMap(s => [s.inc, s.exp]));
-    const bars = series.map(s => `<div class="bcol${s.m === ui.month ? ' cur' : ''}">
-      <div class="bpair"><span class="bi" style="height:${s.inc / max * 100}%" title="Ingresos ${fmt(s.inc)}"></span><span class="be" style="height:${s.exp / max * 100}%" title="Gastos ${fmt(s.exp)}"></span></div>
-      <small>${monthLabel(s.m, true).replace('.', '')}</small></div>`).join('');
+    const sixIncome = series.reduce((sum, item) => sum + item.inc, 0);
+    const sixExpense = series.reduce((sum, item) => sum + item.exp, 0);
+    const sixTotal = sixIncome + sixExpense;
+    const incomeShare = sixTotal ? sixIncome / sixTotal * 100 : 0;
+    const sixChart = `<div class="donutwrap six-months">
+      <div class="donut" role="img" aria-label="Últimos seis meses: ingresos ${fmt(sixIncome)}, gastos ${fmt(sixExpense)}" style="background:${sixTotal ? `conic-gradient(var(--inc) 0% ${incomeShare}%, var(--exp) ${incomeShare}% 100%)` : 'var(--line)'}">
+        <div><small>Balance del período</small><b class="${sixIncome - sixExpense >= 0 ? 'pos' : 'neg'}">${fmt(sixIncome - sixExpense)}</b></div>
+      </div>
+      <ul class="legend">
+        <li><i style="background:var(--inc)"></i><span>Ingresos</span><b>${fmt(sixIncome)}</b><em>${sixTotal ? Math.round(incomeShare) : 0}%</em></li>
+        <li><i style="background:var(--exp)"></i><span>Gastos</span><b>${fmt(sixExpense)}</b><em>${sixTotal ? 100 - Math.round(incomeShare) : 0}%</em></li>
+      </ul>
+    </div>`;
 
     const spent = spentByCat(ui.month);
     const budCats = budgetCats().filter(c => budgetFor(c) > 0);
@@ -996,8 +1004,11 @@ const views = {
         ${goals.length ? `<div class="home-goals">${goals.map(g => goalRow(g, true)).join('')}</div>` : '<p class="muted">Puedes agregar otras metas y ver su avance aquí.</p>'}
       </section>
       <section class="card"><h3>¿En qué gastas?</h3><div class="donutwrap">${donut}</div></section>
-      <section class="card"><h3>Últimos 6 meses</h3><div class="bars">${bars}</div>
-        <p class="muted"><i class="dot bi"></i>Ingresos <i class="dot be"></i>Gastos</p></section>
+      <section class="card"><h3>Últimos 6 meses</h3>
+        <p class="muted six-range">${monthLabel(months[0])} – ${monthLabel(months[5])}</p>
+        ${sixChart}
+        <p class="muted">${sixTotal ? 'Proporción de ingresos y gastos del período completo.' : 'Todavía no hay ingresos ni gastos en este período.'}</p>
+      </section>
       `;
   },
 
