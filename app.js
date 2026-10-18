@@ -1148,13 +1148,16 @@ function fillCategories(type, selected) {
   const sel = $('#txForm').category;
   const cats = [...data.settings.categories[type]];
   if (selected && !cats.includes(selected)) cats.push(selected);
-  sel.innerHTML = cats.map(c => `<option ${c === selected ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  sel.innerHTML = cats.map(c => `<option ${c === selected ? 'selected' : ''}>${esc(c)}</option>`).join('') + `<option value="__new_category__">${type === 'gasto' ? '➕ Agregar nuevo gasto…' : '➕ Nueva categoría de ingreso…'}</option>`;
 }
 function setTxType(type, selected) {
   txType = type;
   const isTr = type === 'transferencia';
   $('#txType').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.type === type));
   $('#catLabel').hidden = isTr;
+  $('#txNewCategoryWrap').hidden = true;
+  $('#txForm').newCategory.required = false;
+  $('#txForm').newCategory.disabled = true;
   $('#txForm').category.required = !isTr;
   $('#toLabel').hidden = !isTr;
   $('#accLabel').textContent = isTr ? 'Desde' : 'Pagado con';
@@ -1457,9 +1460,16 @@ $('#txForm').addEventListener('submit', e => {
   const f = e.target;
   const amount = parseAmount(f.amount.value);
   if (!amount) { toast('Ingresa un monto mayor a 0'); return; }
+  let category = f.category.value;
+  const creatingCategory = txType !== 'transferencia' && category === '__new_category__';
+  if (creatingCategory) {
+    category = f.newCategory.value.trim().replace(/\s+/g, ' ');
+    if (!category) { toast('Escribe el nombre del gasto o categoría'); return; }
+    category = data.settings.categories[txType].find(c => c.toLocaleLowerCase('es') === category.toLocaleLowerCase('es')) || category[0].toUpperCase() + category.slice(1);
+  }
   const base = { id: editingTx?.id || uid(), type: txType, amount, date: f.date.value,
     note: f.note.value.trim(), createdAt: editingTx?.createdAt || now() };
-  if (editingTx?.budgetMonth && txType === 'gasto' && f.category.value === editingTx.category && f.date.value.startsWith(editingTx.budgetMonth)) base.budgetMonth = editingTx.budgetMonth;
+  if (editingTx?.budgetMonth && txType === 'gasto' && category === editingTx.category && f.date.value.startsWith(editingTx.budgetMonth)) base.budgetMonth = editingTx.budgetMonth;
   if (txType === 'transferencia') {
     if (f.account.value === f.to.value) { toast('Elige dos cuentas distintas'); return; }
     upsert('transactions', Object.assign(base, { category: 'Transferencia', from: f.account.value, to: f.to.value }));
@@ -1470,16 +1480,20 @@ $('#txForm').addEventListener('submit', e => {
       if (!account) { toast(payMethod === 'efectivo' ? 'Crea una cuenta de efectivo en Inicio' : 'Crea una cuenta bancaria en Inicio'); return; }
       try { localStorage.setItem('finanzas.ultimoMetodo', payMethod); } catch { }
     } else rememberAccount(account);
-    if (txType === 'ingreso' && f.category.value === 'Sueldo' && (!editingTx || editingTx.reserves)) {
+    if (txType === 'ingreso' && category === 'Sueldo' && (!editingTx || editingTx.reserves)) {
       base.reserves = salaryReserves(amount, editingTx?.reserves?.rates || reserveRates());
     }
-    upsert('transactions', Object.assign(base, { category: f.category.value, account }));
+    if (creatingCategory && !data.settings.categories[txType].includes(category)) {
+      data.settings.categories[txType].push(category);
+      data.settings.updatedAt = now();
+    }
+    upsert('transactions', Object.assign(base, { category, account }));
   }
   $('#txDialog').close();
   if (txType === 'gasto' && !editingTx) {
-    const b = budgetFor(f.category.value, f.date.value.slice(0, 7));
-    const s = spentByCat(f.date.value.slice(0, 7))[f.category.value] || 0;
-    if (b && s > b) toast(`Superaste el presupuesto de ${f.category.value}`);
+    const b = budgetFor(category, f.date.value.slice(0, 7));
+    const s = spentByCat(f.date.value.slice(0, 7))[category] || 0;
+    if (b && s > b) toast(`Superaste el presupuesto de ${category}`);
     else toast('Movimiento guardado');
   } else toast('Movimiento guardado');
 });
@@ -1568,6 +1582,13 @@ document.addEventListener('change', e => {
     $('#budgetNewWrap').hidden = el.value !== '__new';
     el.form.repeat.checked = defaultBudgetRepeat(el.value === '__new' ? el.form.newcat.value : el.value);
     if (el.value === '__new') setTimeout(() => el.form.newcat.focus(), 30);
+  }
+  if (el.name === 'category' && el.form?.id === 'txForm') {
+    const creating = el.value === '__new_category__';
+    $('#txNewCategoryWrap').hidden = !creating;
+    el.form.newCategory.disabled = !creating;
+    el.form.newCategory.required = creating;
+    if (creating) el.form.newCategory.focus();
   }
   if (el.dataset.budgetPayAll !== undefined) {
     el.checked = false; openBulkBudgetPayment();
