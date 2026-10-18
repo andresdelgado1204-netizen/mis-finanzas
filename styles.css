@@ -744,3 +744,7 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .sstate.err i { background: var(--neg); }
 .sstate.busy i { background: var(--warn); animation: pulse 1s infinite; }
 .monthbar b { font-family: "Fraunces Title", Georgia, "Times New Roman", serif; font-weight: 600; font-size: 1.3rem; letter-spacing: -.01em; }
+
+/* ===== Pantalla de ingreso con la letra del título ===== */
+.gate h1 { font-family: "Fraunces Title", Georgia, "Times New Roman", serif; font-weight: 600; font-size: 2.1rem; letter-spacing: -.015em; }
+.gatelogo { box-shadow: 0 6px 18px rgba(67, 93, 204, .25); }
