@@ -559,3 +559,6 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .bulk-budget-row { padding: 16px 0 0; margin-top: 16px; border-top: 1px solid var(--line); }
 .bulk-budget-row > b { display: block; margin-bottom: 12px; overflow-wrap: anywhere; }
 .edit-budget-payment { margin: 4px 0 8px; width: 100%; }
+
+.tabs button[data-tab="movimientos"], .tabs button[data-tab="presupuesto"] { white-space: normal; text-align: center; }
+@media (max-width: 799px) { .tabs button { font-size: .6rem; line-height: 1.2; padding: 4px 2px; } }

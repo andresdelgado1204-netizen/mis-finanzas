@@ -236,7 +236,7 @@ function monthlyPayCard() {
     ${inc > 0 ? progress(exp + reserved, inc) : ''}
     ${inc > 0 && left > 0 && current < next ? `<p class="muted">Puedes gastar unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta fin de mes.</p>` : ''}
     ${pays.length ? `<p class="payok">✓ Pago del mes registrado: ${fmt(paid)}</p>` : `<button class="btn wide" data-action="pay-month" data-date="${date}">Registrar pago del mes</button>`}
-    <p class="muted">Resumen del mes completo. Puedes registrar ingresos adicionales en Movimientos.</p>
+    <p class="muted">Resumen del mes completo. Puedes registrar ingresos adicionales en Gastos ocasionales.</p>
   </section>`;
 }
 
@@ -1015,8 +1015,8 @@ const views = {
         <div class="card stat"><small>Gastos</small><b class="neg">${fmt(exp)}</b></div>
         <div class="card stat"><small>Disponible del mes</small><b class="${bal >= 0 ? 'pos' : 'neg'}">${fmt(bal)}</b></div>
       </section>
-      <div class="summary-head budget-summary-title"><h3>Presupuesto del mes</h3><a href="#" data-tab="presupuesto">Ver presupuesto →</a></div>
-      <section class="cards3" aria-label="Resumen del presupuesto del mes">
+      <div class="summary-head budget-summary-title"><h3>Gastos mensuales</h3><a href="#" data-tab="presupuesto">Ver gastos mensuales →</a></div>
+      <section class="cards3" aria-label="Resumen de gastos mensuales">
         <div class="card stat"><small>Gasto previsto</small><b>${fmt(budTotal)}</b></div>
         <div class="card stat"><small>Pagado</small><b class="neg">${fmt(budSpent)}</b></div>
         <div class="card stat"><small>${budSpent > budTotal ? 'Excedido' : 'Pendiente'}</small><b class="${budSpent > budTotal ? 'neg' : 'pos'}">${fmt(Math.abs(budTotal - budSpent))}</b></div>
@@ -1056,7 +1056,7 @@ const views = {
     const spent = spentByCat(ui.month);
     const cats = budgetCats();
     const addBtn = `<div class="row-end"><button class="btn" data-action="new-budget">+ Agregar categoría</button></div>`;
-    if (!cats.length) return `<section class="card budget-panel"><h3>Presupuesto del mes</h3>
+    if (!cats.length) return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
       <p class="empty" style="padding:24px 12px">Todavía no tienes categorías en tu presupuesto.<br>Agrega las que quieras controlar, por ejemplo Supermercado o Transporte, con su límite mensual.</p>
       ${addBtn}</section>`;
     const rows = cats.map(c => {
@@ -1066,12 +1066,12 @@ const views = {
         ${b ? progress(s, b) : ''}
         <div class="budinput"><label for="bud-${esc(c)}">Monto previsto</label>
           <span class="budctl"><input id="bud-${esc(c)}" type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}">
-          <button class="iconbtn" data-action="del-budget" data-cat="${esc(c)}" aria-label="Quitar ${esc(c)} del presupuesto" title="Quitar del presupuesto">✕</button></span></div>
+          <button class="iconbtn" data-action="del-budget" data-cat="${esc(c)}" aria-label="Quitar ${esc(c)} de gastos mensuales" title="Quitar de gastos mensuales">✕</button></span></div>
         ${budgetPaidControl(c)}
         <label class="budget-repeat"><input type="checkbox" data-budget-repeat="${esc(c)}" ${budgetRepeats(activeBudget(c)) ? 'checked' : ''}> Repetir cada mes</label>
       </div>`;
     }).join('');
-    return `<section class="card budget-panel"><h3>Presupuesto del mes</h3>
+    return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
       <p class="muted">Planifica el monto y marca «Pagado» cuando salga el dinero. Activa «Repetir cada mes» para tus gastos habituales.</p>${addBtn}${budgetBulkControl()}<div class="budget-items">${rows}</div></section>`;
   },
 
@@ -1433,7 +1433,7 @@ document.addEventListener('click', e => {
     case 'new-budget': openBudget(); break;
     case 'del-budget': {
       const cat = el.dataset.cat;
-      ask(`¿Quitar ${cat} del presupuesto? Tus movimientos de esta categoría no se borran.`, 'Quitar')
+      ask(`¿Quitar ${cat} de gastos mensuales? Tus movimientos de esta categoría no se borran.`, 'Quitar')
         .then(ok => { if (ok) { const old = activeBudget(cat); if (old) saveBudgetMonth(cat, 0, budgetRepeats(old), true); } });
       break;
     }
@@ -1638,7 +1638,7 @@ document.addEventListener('submit', e => {
       if (budgetPayment(item.cat, pending.month)) continue;
       const tx = { id: budgetPaymentId(item.cat, pending.month), type: 'gasto', category: item.cat,
         amount: item.amount, account: item.account, date: f.date.value, budgetMonth: pending.month,
-        note: 'Pago del presupuesto', createdAt: now(), updatedAt: now() };
+        note: 'Pago de gastos mensuales', createdAt: now(), updatedAt: now() };
       const index = data.transactions.findIndex(t => t.id === tx.id);
       if (index >= 0) data.transactions[index] = tx; else data.transactions.push(tx);
       added++;
@@ -1657,7 +1657,7 @@ document.addEventListener('submit', e => {
     if (!f.date.value.startsWith(pending.month)) { toast('Elige una fecha del mes seleccionado'); return; }
     upsert('transactions', { id: budgetPaymentId(pending.cat, pending.month), type: 'gasto',
       category: pending.cat, amount: pending.amount, account: f.account.value, date: f.date.value,
-      budgetMonth: pending.month, note: 'Pago del presupuesto', createdAt: now() });
+      budgetMonth: pending.month, note: 'Pago de gastos mensuales', createdAt: now() });
     pendingBudgetPayment = null;
     $('#budgetPayDialog').close();
     toast('Pago registrado y descontado de la cuenta'); return;
@@ -1687,7 +1687,7 @@ document.addEventListener('submit', e => {
     }
     saveBudgetMonth(cat, parseAmount(f.amount.value), f.repeat.checked);
     $('#budgetDialog').close();
-    toast(`${cat} agregada al presupuesto`);
+    toast(`${cat} agregada a gastos mensuales`);
     return;
   }
   if (e.target.id === 'myNameForm') {
