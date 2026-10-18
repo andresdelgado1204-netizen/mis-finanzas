@@ -622,8 +622,8 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .swatchbox:focus-visible { outline: 2px solid var(--text); outline-offset: 4px; border-radius: 8px; }
 /* El color de la sesión también tiñe el fondo (y en modo oscuro tarjetas y bordes) */
 :root[data-accent] {
-  --bg: color-mix(in srgb, var(--btn) 9%, #f6f7fa);
-  --line: color-mix(in srgb, var(--btn) 14%, #e0e5ec);
+  --bg: color-mix(in srgb, var(--btn) 4%, #f8f9fb);
+  --line: color-mix(in srgb, var(--btn) 10%, #e2e6ec);
 }
 :root[data-theme="dark"][data-accent] {
   --bg: color-mix(in srgb, var(--btn) 16%, #0b0f16);
