@@ -432,3 +432,63 @@ input:not([type=checkbox]), select, textarea { min-height: 50px; border-radius: 
   .fab { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px) !important; }
   .badge { position: absolute; top: 3px; left: calc(50% + 6px); margin-left: 0; }
 }
+
+/* Paleta y tipografía: azul índigo, superficies suaves y texto legible. */
+:root, :root[data-theme="light"] {
+  --bg: #f3f5fa;
+  --card: #ffffff;
+  --text: #202b40;
+  --muted: #59677e;
+  --line: #dce3ee;
+  --accent: #435dcc;
+  --accent-soft: #e9edfc;
+  --pos: #147348;
+  --neg: #bb3939;
+  --warn: #996400;
+  --inc: #27946a;
+  --exp: #d96756;
+  --shadow: 0 4px 20px rgba(31, 48, 84, .045);
+}
+:root[data-theme="dark"] {
+  --bg: #101622;
+  --card: #1a2332;
+  --text: #edf2fc;
+  --muted: #acb9cf;
+  --line: #303d52;
+  --accent: #a2b5ff;
+  --accent-soft: #263451;
+  --pos: #73d9ac;
+  --neg: #ff9b96;
+  --warn: #efc76c;
+  --inc: #73d9ac;
+  --exp: #ff9b96;
+  --shadow: 0 6px 24px rgba(0, 0, 0, .10);
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.55;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+h3, h4 { font-weight: 650; letter-spacing: -.015em; }
+.brand { font-weight: 750; letter-spacing: -.025em; }
+.moneyhead b { font-weight: 750; letter-spacing: -.035em; line-height: 1.2; }
+.stat b, .weekgrid b { font-weight: 700; letter-spacing: -.02em; }
+.stat small, .weekgrid small { font-size: .84rem; }
+.form label, .flabel { font-size: .9rem; }
+input, select, textarea { color: var(--text); }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+.btn, .fab { color: #fff; background: #435dcc; }
+.btn.ghost, .btn.outline { color: var(--text); }
+.btn.danger { color: var(--neg); }
+.btn.dangerfill { background: #b93139; color: #fff; }
+.btn.outline, .btn.ghost { background: var(--card); }
+.tabs { box-shadow: 0 -4px 24px rgba(22, 35, 60, .06); }
+.tabs button { font-weight: 500; }
+.tabs button.active { color: var(--accent); font-weight: 700; }
+.txlist small { font-size: .86rem; }
+.money { background: linear-gradient(135deg, var(--accent-soft), var(--card)); }
+@media (hover: hover) {
+  .btn:hover, .fab:hover { filter: brightness(1.08); }
+  .tabs button:hover { background: var(--accent-soft); }
+}

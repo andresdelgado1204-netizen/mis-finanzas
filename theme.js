@@ -5,7 +5,7 @@
     const dark = systemTheme.matches;
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     const themeColor = document.querySelector('meta[name="theme-color"]');
-    if (themeColor) themeColor.content = dark ? '#0f141b' : '#f4f6fa';
+    if (themeColor) themeColor.content = dark ? '#101622' : '#f3f5fa';
   }
   updateTheme();
   if (systemTheme.addEventListener) systemTheme.addEventListener('change', updateTheme);
