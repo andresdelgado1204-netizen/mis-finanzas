@@ -1,6 +1,6 @@
 // Permite abrir la app sin conexión. Primero intenta la red (para recibir
 // actualizaciones) y si no hay conexión usa la copia guardada.
-const CACHE = 'finanzas-v2';
+const CACHE = 'finanzas-v3';
 const ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest',
   'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
@@ -21,7 +21,7 @@ self.addEventListener('fetch', e => {
   // Nunca interceptar la API de GitHub ni otros dominios.
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' }) // siempre pregunta si hay versión nueva
       .then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));
