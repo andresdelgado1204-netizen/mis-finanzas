@@ -145,6 +145,36 @@ function lastPay() {
 }
 function methodOf(t) { return (data.accounts.find(a => a.id === accId(t)) || {}).kind === 'efectivo' ? 'efectivo' : 'transferencia'; }
 
+function monthlyPayCard() {
+  const month = ui.month;
+  const txs = live(data.transactions).filter(t => t.date.startsWith(month));
+  let inc = 0, exp = 0;
+  for (const t of txs) {
+    if (t.type === 'ingreso') inc += t.amount;
+    else if (t.type === 'gasto') exp += t.amount;
+  }
+  const left = inc - exp;
+  const pays = txs.filter(isPay);
+  const paid = pays.reduce((sum, t) => sum + t.amount, 0);
+  const first = month + '-01';
+  const next = shiftMonth(month, 1) + '-01';
+  const current = today();
+  const date = current >= first && current < next ? current : first;
+  const daysLeft = daysBetween(date, next);
+  return `<section class="card week">
+    <div class="weekhead"><h3>Pago mensual</h3><span class="muted">${monthLabel(month)}</span></div>
+    <div class="weekgrid">
+      <div><small>Recibiste</small><b class="pos">${fmt(inc)}</b></div>
+      <div><small>Gastaste</small><b class="neg">${fmt(exp)}</b></div>
+      <div><small>Te queda</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
+    </div>
+    ${inc > 0 ? progress(exp, inc) : ''}
+    ${inc > 0 && left > 0 && current < next ? `<p class="muted">Puedes gastar unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta fin de mes.</p>` : ''}
+    ${pays.length ? `<p class="payok">✓ Pago del mes registrado: ${fmt(paid)}</p>` : `<button class="btn wide" data-action="pay-month" data-date="${date}">Registrar pago del mes</button>`}
+    <p class="muted">Resumen del mes completo. Puedes registrar ingresos adicionales en Movimientos.</p>
+  </section>`;
+}
+
 function weekCard() {
   const ws = weekStart(refDay()), we = addDays(ws, 6), next = addDays(ws, 7);
   const txs = live(data.transactions).filter(t => t.date >= ws && t.date <= we);
@@ -813,7 +843,7 @@ const views = {
           <button class="btn ghost" data-action="new-transfer">⇄ Mover dinero</button>
         </div>
       </section>
-      ${weekCard()}
+      ${isAdmin() ? weekCard() : monthlyPayCard()}
       <section class="cards3">
         <div class="card stat"><small>Ingresos</small><b class="pos">${fmt(inc)}</b></div>
         <div class="card stat"><small>Gastos</small><b class="neg">${fmt(exp)}</b></div>
@@ -1200,6 +1230,7 @@ document.addEventListener('click', e => {
     case 'new-transfer':
       if (accounts().length < 2) { toast('Necesitas al menos dos cuentas'); break; }
       openTransfer(); break;
+    case 'pay-month':
     case 'pay-week': {
       const lp = lastPay();
       openTx();
@@ -1207,7 +1238,7 @@ document.addEventListener('click', e => {
       setTxType('ingreso', 'Sueldo');
       if (lp) { f.amount.value = lp.amount; setPayMethod(methodOf(lp)); }
       f.date.value = el.dataset.date;
-      f.note.value = 'Pago semanal';
+      f.note.value = el.dataset.action === 'pay-month' ? 'Pago mensual' : 'Pago semanal';
       break;
     }
     case 'new-acc': openAcc(); break;
