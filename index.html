@@ -151,13 +151,14 @@
         <label><span id="authUserLabel">Usuario o correo</span><input id="authEmail" name="email" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="andres" required></label>
         <p id="authUserHint" class="authhint" hidden>Elige un usuario (por ejemplo <b>andres</b>). Se verá como <b>andres@finanzas</b>.</p>
         <label>Contraseña<input id="authPass" name="password" type="password" autocomplete="current-password" minlength="6" required></label>
-        <p id="authNotice" class="authnote" hidden>Tu cuenta quedará pendiente hasta que el administrador la apruebe. El administrador puede ver la información financiera que registres en la app.</p>
+        <p id="authNotice" class="authnote" hidden></p>
         <p id="authError" class="autherr" role="alert" hidden></p>
         <button class="btn wide" id="authSubmit">Ingresar</button>
       </form>
       <button type="button" class="linkbtn" id="authToggle" data-action="auth-toggle">¿No tienes cuenta? Crea una</button>
       <button type="button" class="linkbtn" id="authReset" data-action="auth-reset">Olvidé mi contraseña</button>
       <button type="button" class="linkbtn" id="authOther" data-action="auth-other" hidden>Ingresar con otra cuenta</button>
+      <p class="authfoot">¿No tienes cuenta? Pídele tu usuario al administrador.<br>El administrador puede ver la información que registres en la app.</p>
     </div>
   </div>
 

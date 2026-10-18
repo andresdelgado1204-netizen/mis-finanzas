@@ -296,8 +296,9 @@ function onLogin(u) {
 function onProfile(doc) {
   if (!doc.exists) {
     if (doc.metadata.fromCache) return; // esperar respuesta del servidor
+    if (!isAdmin()) { cloud.status = 'sin-acceso'; setStatusScreen('noaccess'); return; }
     const t = now();
-    profileRef(cloud.user.uid).set({ email: cloud.user.email, createdAt: t, lastSeen: t, status: isAdmin() ? 'activo' : 'pendiente' })
+    profileRef(cloud.user.uid).set({ email: cloud.user.email, createdAt: t, lastSeen: t, status: 'activo' })
       .catch(err => setStatusScreen('error', cloudErr(err)));
     return;
   }
@@ -355,6 +356,18 @@ function startAdmin() {
     if (ui.tab === 'admin' && !userIsTyping()) render();
   }, err => toast(cloudErr(err))));
 }
+async function createPerson(raw, pass) {
+  const email = toLoginEmail(raw);
+  const sec = firebase.apps.find(a => a.name === 'altas') || firebase.initializeApp(FIREBASE_CONFIG, 'altas');
+  const secAuth = sec.auth();
+  try { await secAuth.setPersistence(firebase.auth.Auth.Persistence.NONE); } catch { }
+  const cred = await secAuth.createUserWithEmailAndPassword(email, pass);
+  const uid = cred.user.uid;
+  try { await secAuth.signOut(); } catch { }
+  await profileRef(uid).set({ email, createdAt: now(), lastSeen: 0, status: 'activo', createdBy: cloud.user.uid });
+  return { uid, email };
+}
+
 function setUserStatus(uid, status) {
   return profileRef(uid).update({ status, reviewedAt: now() })
     .then(() => toast(status === 'activo' ? 'Cuenta activada' : 'Cuenta bloqueada'))
@@ -380,6 +393,8 @@ function agoText(ts) {
   const d = Math.round(h / 24);
   return d === 1 ? 'ayer' : `hace ${d} días`;
 }
+const APP_URL = 'https://andresdelgado1204-netizen.github.io/mis-finanzas/';
+const credsText = c => `Mis Finanzas\nEntra en: ${APP_URL}\nUsuario: ${c.login}\nContraseña: ${c.pass}\n\nCuando entres, cámbiala en Ajustes → Cambiar contraseña.`;
 const STATUS = { activo: ['Activa', 'ok'], pendiente: ['Pendiente', 'warn'], bloqueado: ['Bloqueada', 'bad'] };
 
 function viewerHTML() {
@@ -507,6 +522,7 @@ function setStatusScreen(kind, err) {
     loading: ['⏳', 'Cargando tu cuenta…', 'Un momento.'],
     pending: ['🕓', 'Tu cuenta está esperando aprobación', 'El administrador debe aprobarla antes de que puedas usar la app. Esta pantalla se actualiza sola cuando te aprueben.'],
     blocked: ['🔒', 'Tu cuenta está bloqueada', 'No tienes acceso a la app. Si crees que es un error, habla con el administrador.'],
+    noaccess: ['🔒', 'Esta cuenta no está autorizada', 'Las cuentas las crea el administrador. Pídele tu usuario y contraseña.'],
     error: ['⚠️', 'No se pudo cargar tu cuenta', err || 'Revisa tu conexión a internet e intenta de nuevo.'],
   }[kind];
   $('#statusIcon').textContent = t[0];
@@ -523,7 +539,7 @@ function setAuthMode(m) {
   $('#authTitle').textContent = signup ? 'Crea tu cuenta' : m === 'reauth' ? 'Confirma tu contraseña' : 'Ingresa a tu cuenta';
   $('#authSubmit').textContent = signup ? 'Crear cuenta' : 'Ingresar';
   f.password.autocomplete = signup ? 'new-password' : 'current-password';
-  $('#authToggle').hidden = m === 'reauth';
+  $('#authToggle').hidden = true; // las cuentas las crea el administrador
   $('#authToggle').textContent = signup ? '¿Ya tienes cuenta? Ingresa' : '¿No tienes cuenta? Crea una';
   $('#authReset').hidden = signup;
   $('#authOther').hidden = m !== 'reauth';
@@ -541,7 +557,7 @@ function authErr(err) {
     'auth/wrong-password': 'Usuario o contraseña incorrectos.',
     'auth/invalid-credential': 'Usuario o contraseña incorrectos.',
     'auth/invalid-login-credentials': 'Usuario o contraseña incorrectos.',
-    'auth/email-already-in-use': 'Ese usuario ya existe. Elige otro o ingresa con tu contraseña.',
+    'auth/email-already-in-use': 'Ese usuario ya existe. Elige otro.',
     'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
     'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos y vuelve a intentar.',
     'auth/network-request-failed': 'Sin conexión a internet. Revisa tu conexión e intenta de nuevo.',
@@ -654,7 +670,22 @@ const views = {
             : `<button class="btn ghost danger" data-action="adm-block" data-id="${u.uid}">Bloquear</button>`}`}</div></div>`; }).join('') || '<p class="muted">Aún no hay usuarios.</p>'}
       </section>`;
     const top = `<div class="row-end" style="margin:0 0 14px"><button class="btn ghost" data-action="personal-on">👤 Ver solo mis finanzas</button></div>`;
-    return top + viewerHTML() + pendHTML + listHTML;
+    const nc = ui.newCreds;
+    const credsHTML = nc ? `<div class="creds">
+        <b>✓ Cuenta creada. Envíale estos datos a la persona:</b>
+        <pre id="credsText">${esc(credsText(nc))}</pre>
+        <div class="row-end"><button class="btn ghost" data-action="adm-creds-close">Listo</button><button class="btn" data-action="adm-copy">Copiar datos</button></div>
+      </div>` : '';
+    const addHTML = `<section class="card"><h3>Agregar persona</h3>
+      <p class="muted" style="margin-bottom:12px">Crea la cuenta y entrégale su usuario y contraseña. Podrá cambiar la contraseña en Ajustes.</p>
+      <form id="adminAddForm" class="form addform">
+        <label>Usuario<input id="addUser" name="user" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="maria" required></label>
+        <label>Contraseña inicial<input id="addPass" name="pass" type="text" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" minlength="6" placeholder="Mínimo 6 caracteres" required></label>
+        <p class="muted addprev" id="addPreview">Se verá como <b>usuario@finanzas</b></p>
+        <p id="addError" class="autherr" hidden></p>
+        <div class="row-end"><button class="btn" id="addBtn">Crear cuenta</button></div>
+      </form>${credsHTML}</section>`;
+    return top + viewerHTML() + addHTML + pendHTML + listHTML;
   },
 
   inicio() {
@@ -767,6 +798,17 @@ const views = {
         </div>` : ''}
         <div class="row-end"><button class="btn ghost danger" data-action="logout">Cerrar sesión</button></div>
       </section>
+
+      ${window.PREVIEW ? '' : `<section class="card"><h3>Cambiar contraseña</h3>
+        <form id="passForm" class="form">
+          <input type="text" name="username" autocomplete="username" value="${esc(cloud.user ? (isUsernameAccount(cloud.user.email) ? shownName(cloud.user.email).replace('@finanzas', '') : cloud.user.email) : '')}" hidden>
+          <label>Contraseña actual<input name="current" type="password" autocomplete="current-password" required></label>
+          <label>Nueva contraseña<input name="newpass" type="password" autocomplete="new-password" minlength="6" required></label>
+          <label>Repite la nueva contraseña<input name="newpass2" type="password" autocomplete="new-password" minlength="6" required></label>
+          <p id="passError" class="autherr" hidden></p>
+          <div class="row-end"><button class="btn">Cambiar contraseña</button></div>
+        </form>
+      </section>`}
 
       <section class="card"><h3>Tus datos</h3>
         <div class="btngrid">
@@ -998,6 +1040,13 @@ document.addEventListener('click', e => {
       break;
     }
     case 'adm-close': ui.viewing = null; render(); break;
+    case 'adm-creds-close': ui.newCreds = null; render(); break;
+    case 'adm-copy': {
+      const txt = credsText(ui.newCreds);
+      const fallback = () => { const r = document.createRange(); r.selectNodeContents($('#credsText')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Texto seleccionado: cópialo con Cmd + C'); };
+      if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('Datos copiados')).catch(fallback); else fallback();
+      break;
+    }
     case 'personal-on': setPersonalMode(true); break;
     case 'personal-off': setPersonalMode(false); ui.tab = 'admin'; render(); break;
     case 'logout':
@@ -1153,6 +1202,12 @@ $('#contribForm').addEventListener('submit', e => {
   toast(isDebt ? 'Pago registrado' : 'Abono registrado');
 });
 
+document.addEventListener('input', e => {
+  if (e.target.id === 'addUser') {
+    const v = e.target.value.trim().toLowerCase();
+    $('#addPreview').innerHTML = v ? `Se verá como <b>${esc(v.includes('@') ? v : v + '@finanzas')}</b> · para entrar escribe <b>${esc(v)}</b>` : 'Se verá como <b>usuario@finanzas</b>';
+  }
+});
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.budget !== undefined) {
@@ -1171,6 +1226,40 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'adminAddForm') {
+    e.preventDefault();
+    const f = e.target, raw = f.user.value.trim(), pass = f.pass.value;
+    const errEl = $('#addError');
+    const fail = m => { errEl.textContent = m; errEl.hidden = false; };
+    errEl.hidden = true;
+    if (raw.includes('@')) { if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return fail('El correo no es válido.'); }
+    else if (!USER_RE.test(raw.toLowerCase())) return fail('El usuario debe tener entre 2 y 30 caracteres: letras, números, punto, guion o guion bajo (sin espacios ni tildes).');
+    if (pass.length < 6) return fail('La contraseña debe tener al menos 6 caracteres.');
+    const btn = $('#addBtn'); btn.disabled = true; btn.textContent = 'Creando…';
+    createPerson(raw, pass)
+      .then(({ email }) => {
+        ui.newCreds = { login: isUsernameAccount(email) ? shownName(email).replace('@finanzas', '') : email, shown: shownName(email), pass };
+        render(); toast('Cuenta creada para ' + shownName(email));
+      })
+      .catch(err => { btn.disabled = false; btn.textContent = 'Crear cuenta'; fail(authErr(err)); });
+    return;
+  }
+  if (e.target.id === 'passForm') {
+    e.preventDefault();
+    const f = e.target, cur = f.current.value, nw = f.newpass.value;
+    const errEl = $('#passError');
+    const fail = m => { errEl.textContent = m; errEl.hidden = false; };
+    errEl.hidden = true;
+    if (nw.length < 6) return fail('La nueva contraseña debe tener al menos 6 caracteres.');
+    if (nw !== f.newpass2.value) return fail('Las contraseñas nuevas no coinciden.');
+    const u = cloud.auth.currentUser;
+    const cred = firebase.auth.EmailAuthProvider.credential(u.email, cur);
+    u.reauthenticateWithCredential(cred)
+      .then(() => u.updatePassword(nw))
+      .then(() => { f.reset(); toast('Contraseña cambiada'); })
+      .catch(err => fail(err && (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') ? 'La contraseña actual no es correcta.' : authErr(err)));
+    return;
+  }
   if (e.target.id === 'authForm') {
     e.preventDefault();
     const f = e.target;

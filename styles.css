@@ -314,3 +314,10 @@ body.gated > .top, body.gated > .tabs, body.gated > #monthbar, body.gated > main
 .statusicon { font-size: 2.6rem; margin-top: 16px; }
 .statustitle { margin: 6px 0 0; font-size: 1.15rem; }
 .authhint { font-size: .82rem; color: var(--muted); margin: -6px 0 12px; }
+.authfoot { font-size: .8rem; color: var(--muted); margin: 14px 0 0; line-height: 1.5; }
+.addform { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.addform .addprev, .addform .autherr, .addform .row-end { grid-column: 1 / -1; }
+.addprev { margin: -6px 0 4px; }
+@media (max-width: 520px) { .addform { grid-template-columns: 1fr; } }
+.creds { margin-top: 14px; padding: 14px; border-radius: 12px; background: color-mix(in srgb, var(--pos) 12%, transparent); border: 1px solid color-mix(in srgb, var(--pos) 35%, transparent); }
+.creds pre { white-space: pre-wrap; overflow-wrap: anywhere; font: .9rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--card); border-radius: 8px; padding: 10px 12px; margin: 10px 0 0; user-select: all; }
