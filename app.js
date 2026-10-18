@@ -74,6 +74,24 @@ const ui = { tab: 'inicio', month: thisMonth(), filter: 'todos' };
 if (startMonth() > ui.month) ui.month = startMonth();
 let version = 0; // cambia con cada edición local
 
+function restoreView(uid) {
+  ui.tab = 'inicio'; ui.month = thisMonth(); ui.filter = 'todos';
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('finanzas.view.' + uid) || 'null');
+    if (!saved) return;
+    if (['inicio', 'movimientos', 'presupuesto', 'metas', 'ajustes', 'admin'].includes(saved.tab)) ui.tab = saved.tab;
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(saved.month || '')) ui.month = saved.month;
+    if (['todos', 'gasto', 'ingreso'].includes(saved.filter)) ui.filter = saved.filter;
+  } catch { }
+}
+function rememberView() {
+  if (!cloud.user) return;
+  try {
+    sessionStorage.setItem('finanzas.view.' + cloud.user.uid, JSON.stringify({ tab: ui.tab, month: ui.month, filter: ui.filter }));
+  } catch { }
+}
+
+
 const live = arr => arr.filter(x => !x.deleted);
 function fmt(n) {
   const cur = data.settings.currency;
@@ -380,6 +398,7 @@ function onLogin(u) {
   cloud.known = {}; cloud.server = new Set();
   cloud.status = null; cloud.seenSet = false; cloud.users = [];
   data = normalize(readJSON(userKey()));
+  restoreView(u.uid);
   if (startMonth() > ui.month) ui.month = startMonth();
   unlocked = !lockInfo() || restoreAfterReload(u.uid);
   setStatusScreen('loading');
@@ -1022,6 +1041,7 @@ function render() {
   renderBrand();
   $('#adminTab').hidden = !showAdmin();
   if (ui.tab === 'admin' && !showAdmin()) ui.tab = 'inicio';
+  rememberView();
   document.querySelectorAll('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === ui.tab));
   $('#monthbar').hidden = !['inicio', 'movimientos', 'presupuesto'].includes(ui.tab);
   $('#monthLabel').textContent = monthLabel(ui.month);
