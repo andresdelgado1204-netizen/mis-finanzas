@@ -305,7 +305,7 @@ function budgetPayment(cat, month = ui.month) {
 }
 function budgetPaidControl(cat) {
   const paid = budgetPayment(cat), amount = budgetFor(cat);
-  return `<label class="budget-repeat budget-paid"><input type="checkbox" data-budget-pay="${esc(cat)}" ${paid ? 'checked disabled' : ''} ${amount > 0 ? '' : 'disabled'}>
+  return `<label class="budget-repeat budget-paid"><input type="checkbox" data-budget-pay="${esc(cat)}" ${paid ? 'checked' : ''} ${paid || amount > 0 ? '' : 'disabled'}>
     ${paid ? `Pagado: ${fmt(paid.amount)} · ${esc(accName(accId(paid)))}` : 'Marcar como pagado'}</label>
     ${paid ? `<button type="button" class="btn ghost edit-budget-payment" data-action="edit-tx" data-id="${esc(paid.id)}">Editar pago</button>` : ''}`;
 }
@@ -1573,8 +1573,16 @@ document.addEventListener('change', e => {
     el.checked = false; openBulkBudgetPayment();
   }
   if (el.dataset.budgetPay !== undefined) {
-    el.checked = false;
-    openBudgetPayment(el.dataset.budgetPay);
+    const cat = el.dataset.budgetPay;
+    const paid = budgetPayment(cat);
+    if (paid) {
+      el.checked = true;
+      ask(`¿Desmarcar ${cat} como pagado? Se anulará el gasto de ${fmt(paid.amount)} y ese monto volverá al saldo de ${accName(accId(paid))}.`, 'Desmarcar pago')
+        .then(ok => { if (ok) { remove('transactions', paid.id); toast('Pago desmarcado y saldo actualizado'); } else render(); });
+    } else {
+      el.checked = false;
+      openBudgetPayment(cat);
+    }
   }
   if (el.dataset.budgetRepeat !== undefined) {
     const cat = el.dataset.budgetRepeat;
