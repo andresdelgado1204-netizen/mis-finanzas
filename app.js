@@ -275,10 +275,26 @@ function weekCard() {
   </section>`;
 }
 
-function budgetCats() {
-  return live(data.budgets).filter(b => b.category).sort((a, b) => (a.createdAt || a.updatedAt || 0) - (b.createdAt || b.updatedAt || 0)).map(b => b.category);
+function defaultBudgetRepeat(category) {
+  const name = category.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return /\b(luz|agua|telefono|arriendo|pasajes)\b/.test(name);
 }
-function budgetFor(cat) { const b = data.budgets.find(b => b.id === 'b:' + cat && !b.deleted); return b ? b.amount : 0; }
+function budgetMonth(b) { return b.month || startMonth() || thisMonth(); }
+function budgetRepeats(b) { return typeof b.repeat === 'boolean' ? b.repeat : defaultBudgetRepeat(b.category || ''); }
+function activeBudget(cat, month = ui.month) {
+  const candidates = data.budgets.filter(b => b.category === cat && budgetMonth(b) <= month);
+  candidates.sort((a, b) => budgetMonth(b).localeCompare(budgetMonth(a)) || (b.updatedAt || 0) - (a.updatedAt || 0));
+  const selected = candidates[0];
+  return selected && !selected.deleted && (budgetRepeats(selected) || budgetMonth(selected) === month) ? selected : null;
+}
+function budgetCats() {
+  return [...new Set(data.budgets.map(b => b.category).filter(Boolean))].filter(c => activeBudget(c));
+}
+function budgetFor(cat, month = ui.month) { return activeBudget(cat, month)?.amount || 0; }
+function saveBudgetMonth(cat, amount, repeat, deleted = false) {
+  upsert('budgets', { id: 'b:' + cat + ':' + ui.month, category: cat, month: ui.month,
+    amount, repeat, deleted, createdAt: now() });
+}
 function catColor(cat) {
   const all = [...data.settings.categories.gasto, ...data.settings.categories.ingreso];
   const i = all.indexOf(cat);
@@ -912,7 +928,7 @@ const views = {
       <small>${monthLabel(s.m, true).replace('.', '')}</small></div>`).join('');
 
     const spent = spentByCat(ui.month);
-    const budCats = data.settings.categories.gasto.filter(c => budgetFor(c) > 0);
+    const budCats = budgetCats().filter(c => budgetFor(c) > 0);
     const budTotal = budCats.reduce((s, c) => s + budgetFor(c), 0);
     const budSpent = budCats.reduce((s, c) => s + (spent[c] || 0), 0);
     const over = budCats.filter(c => (spent[c] || 0) > budgetFor(c));
@@ -978,10 +994,11 @@ const views = {
         <div class="budinput"><label for="bud-${esc(c)}">Límite mensual</label>
           <span class="budctl"><input id="bud-${esc(c)}" type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}">
           <button class="iconbtn" data-action="del-budget" data-cat="${esc(c)}" aria-label="Quitar ${esc(c)} del presupuesto" title="Quitar del presupuesto">✕</button></span></div>
+        <label class="budget-repeat"><input type="checkbox" data-budget-repeat="${esc(c)}" ${budgetRepeats(activeBudget(c)) ? 'checked' : ''}> Repetir cada mes</label>
       </div>`;
     }).join('');
     return `<section class="card"><h3>Límites por categoría</h3>
-      <p class="muted">Los límites se repiten todos los meses; el avance corresponde al mes seleccionado.</p>${rows}${addBtn}</section>`;
+      <p class="muted">Marca «Repetir cada mes» para mantener una categoría en los meses siguientes. Las demás solo aparecen en este mes. El gasto se calcula por separado cada mes.</p>${rows}${addBtn}</section>`;
   },
 
   metas() {
@@ -1157,6 +1174,7 @@ function openBudget() {
   f.cat.innerHTML = free.map(c => `<option>${esc(c)}</option>`).join('') + '<option value="__new">➕ Nueva categoría…</option>';
   if (!free.length) f.cat.value = '__new';
   $('#budgetNewWrap').hidden = f.cat.value !== '__new';
+  f.repeat.checked = defaultBudgetRepeat(f.cat.value === '__new' ? '' : f.cat.value);
   $('#budgetDialog').showModal();
 }
 
@@ -1339,7 +1357,7 @@ document.addEventListener('click', e => {
     case 'del-budget': {
       const cat = el.dataset.cat;
       ask(`¿Quitar ${cat} del presupuesto? Tus movimientos de esta categoría no se borran.`, 'Quitar')
-        .then(ok => { if (ok) remove('budgets', 'b:' + cat); });
+        .then(ok => { if (ok) { const old = activeBudget(cat); if (old) saveBudgetMonth(cat, 0, budgetRepeats(old), true); } });
       break;
     }
     case 'edit-acc': openAcc(data.accounts.find(a => a.id === id)); break;
@@ -1384,7 +1402,7 @@ $('#txForm').addEventListener('submit', e => {
   }
   $('#txDialog').close();
   if (txType === 'gasto' && !editingTx) {
-    const b = budgetFor(f.category.value);
+    const b = budgetFor(f.category.value, f.date.value.slice(0, 7));
     const s = spentByCat(f.date.value.slice(0, 7))[f.category.value] || 0;
     if (b && s > b) toast(`Superaste el presupuesto de ${f.category.value}`);
     else toast('Movimiento guardado');
@@ -1473,12 +1491,18 @@ document.addEventListener('change', e => {
   const el = e.target;
   if (el.name === 'cat' && el.form && el.form.id === 'budgetForm') {
     $('#budgetNewWrap').hidden = el.value !== '__new';
+    el.form.repeat.checked = defaultBudgetRepeat(el.value === '__new' ? el.form.newcat.value : el.value);
     if (el.value === '__new') setTimeout(() => el.form.newcat.focus(), 30);
   }
+  if (el.dataset.budgetRepeat !== undefined) {
+    const cat = el.dataset.budgetRepeat;
+    saveBudgetMonth(cat, budgetFor(cat), el.checked);
+  }
+  if (el.name === 'newcat' && el.form?.id === 'budgetForm') el.form.repeat.checked = defaultBudgetRepeat(el.value);
   if (el.dataset.budget !== undefined) {
     const cat = el.dataset.budget, amount = parseAmount(el.value);
-    const old = data.budgets.find(b => b.id === 'b:' + cat);
-    upsert('budgets', { id: 'b:' + cat, category: cat, amount, createdAt: (old && old.createdAt) || now() });
+    const old = activeBudget(cat);
+    saveBudgetMonth(cat, amount, old ? budgetRepeats(old) : defaultBudgetRepeat(cat));
   }
   if (el.id === 'importFile' && el.files[0]) {
     el.files[0].text().then(txt => {
@@ -1514,7 +1538,7 @@ document.addEventListener('submit', e => {
       data.settings = Object.assign({}, data.settings, {
         categories: { ...data.settings.categories, gasto: [...data.settings.categories.gasto, cat] }, updatedAt: now() });
     }
-    upsert('budgets', { id: 'b:' + cat, category: cat, amount: parseAmount(f.amount.value), createdAt: now() });
+    saveBudgetMonth(cat, parseAmount(f.amount.value), f.repeat.checked);
     $('#budgetDialog').close();
     toast(`${cat} agregada al presupuesto`);
     return;

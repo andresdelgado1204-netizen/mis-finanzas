@@ -510,3 +510,6 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .reserve-grid b { display: block; margin-top: 8px; font-size: 1.4rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .reserve-grid label { min-width: 0; margin: 0; }
 @media (max-width: 359px) { .reserve-grid { grid-template-columns: 1fr; } }
+
+.budget-repeat { display: flex; align-items: center; gap: 10px; min-height: 48px; margin-top: 8px; color: var(--muted); font-size: .9rem; }
+.budget-repeat input { flex: none; accent-color: var(--accent); }
