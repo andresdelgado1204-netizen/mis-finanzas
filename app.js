@@ -182,20 +182,18 @@ function occasionalHomeCard() {
   const expenses = occasionalExpenses();
   const total = expenses.reduce((sum, item) => sum + item.amount, 0);
   return `<section class="card occasional-summary">
-    <div class="summary-head"><h3>Movimientos</h3><a href="#" data-tab="movimientos">Ver movimientos →</a></div>
+    <div class="summary-head"><h3>Movimientos</h3><a href="#" data-tab="movimientos">Ver todo</a></div>
     <p class="occasional-total neg">${fmt(total)}</p>
-    <p class="muted">Total del mes seleccionado · separado de tus gastos mensuales.</p>
     ${expenses.length ? `<details class="occasional-details"><summary>Ver detalle (${expenses.length})</summary>
       <ul class="txlist">${expenses.map(t => txRow(t).replace('</small>', ` · ${esc(fmtDate(t.date))}</small>`)).join('')}</ul>
-    </details>` : '<p class="muted">Aquí aparecerán los gastos que agregues con un nombre, como una salida o una reparación.</p>'}
-    <button type="button" class="btn wide" data-action="new-tx">+ Agregar movimiento</button>
+    </details>` : '<p class="muted">Sin movimientos este mes</p>'}
   </section>`;
 }
 function reservesCard() {
   const rates = reserveRates(), saved = reservedAmounts();
   const period = isAdmin() ? 'semanal' : 'mensual';
   return `<section class="card reserves"><h3>Separa parte de tu sueldo</h3>
-    <p class="muted">De cada sueldo ${period} nuevo se reserva una parte para tus dos fondos. Otros ingresos quedan completos.</p>
+    <p class="muted">Un porcentaje de cada sueldo ${period} va a tus fondos.</p>
     <div class="reserve-grid">
       <div><span>🛟 Fondo de emergencia</span><b>${fmt(saved.emergency)}</b></div>
       <div><span>🌱 Ahorro</span><b>${fmt(saved.savings)}</b></div>
@@ -205,10 +203,9 @@ function reservesCard() {
         <label>Emergencia (%)<input name="emergency" type="number" min="0" max="100" step="0.1" value="${rates.emergency}" required inputmode="decimal"></label>
         <label>Ahorro (%)<input name="savings" type="number" min="0" max="100" step="0.1" value="${rates.savings}" required inputmode="decimal"></label>
       </div>
-      <p class="muted">Disponible para gastar: ${100 - rates.emergency - rates.savings}% de cada sueldo. Usa 0% para desactivar un fondo.</p>
-      <button class="btn wide">Guardar porcentajes</button>
+      <p class="muted">Te queda para gastar el ${100 - rates.emergency - rates.savings}% de cada sueldo.</p>
+      <button class="btn wide ghost">Guardar porcentajes</button>
     </form>
-    <p class="muted">Se aplica a nuevos movimientos de categoría «Sueldo». Los sueldos anteriores no cambian. Es una reserva en la app: el dinero permanece en tu banco o efectivo y no se registra como gasto.</p>
   </section>`;
 }
 
@@ -317,17 +314,16 @@ function monthlyPayCard() {
   const date = current >= first && current < next ? current : first;
   const daysLeft = daysBetween(date, next);
   return `<section class="card week">
-    <div class="weekhead"><h3>Pago mensual</h3><span class="muted">${monthLabel(month)}</span></div>
+    <div class="weekhead"><h3>Este mes</h3><span class="muted">${monthLabel(month)}</span></div>
     <div class="weekgrid">
       <div><small>Recibiste</small><b class="pos">${fmt(inc)}</b></div>
       <div><small>Gastaste</small><b class="neg">${fmt(exp)}</b></div>
       <div><small>Disponible</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
     </div>
-    ${reserved > 0 ? `<p class="muted">Reservado para emergencia y ahorro: <b>${fmt(reserved)}</b> · descontado del disponible.</p>` : ''}
+    ${reserved > 0 ? `<p class="muted">Reservado: <b>${fmt(reserved)}</b></p>` : ''}
     ${inc > 0 ? progress(exp + reserved, inc) : ''}
-    ${inc > 0 && left > 0 && current < next ? `<p class="muted">Puedes gastar unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta fin de mes.</p>` : ''}
+    ${inc > 0 && left > 0 && current < next ? `<p class="muted">Unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta fin de mes</p>` : ''}
     ${pays.length ? `<p class="payok">✓ Pago del mes registrado: ${fmt(paid)}</p>` : `<button class="btn wide" data-action="pay-month" data-date="${date}">Registrar pago del mes</button>`}
-    <p class="muted">Resumen del mes completo. Puedes registrar ingresos adicionales en Movimientos.</p>
   </section>`;
 }
 
@@ -1107,32 +1103,28 @@ const views = {
         </div>
       </section>
       ${isAdmin() ? weekCard() : monthlyPayCard()}
-      <section class="cards3">
-        <div class="card stat"><small>Ingresos</small><b class="pos">${fmt(inc)}</b></div>
-        <div class="card stat"><small>Gasto total</small><b class="neg">${fmt(exp)}</b></div>
-        <div class="card stat"><small>Disponible del mes</small><b class="${bal >= 0 ? 'pos' : 'neg'}">${fmt(bal)}</b></div>
-      </section>
       ${occasionalHomeCard()}
-      <div class="summary-head budget-summary-title"><h3>Gastos mensuales</h3><a href="#" data-tab="presupuesto">Ver gastos mensuales →</a></div>
-      <section class="cards3" aria-label="Resumen de gastos mensuales">
-        <div class="card stat"><small>Gasto previsto</small><b>${fmt(budTotal)}</b></div>
-        <div class="card stat"><small>Pagado</small><b class="neg">${fmt(budSpent)}</b></div>
-        <div class="card stat"><small>${budSpent > budTotal ? 'Excedido' : 'Pendiente'}</small><b class="${budSpent > budTotal ? 'neg' : 'pos'}">${fmt(Math.abs(budTotal - budSpent))}</b></div>
+      <section class="card" aria-label="Resumen de gastos mensuales">
+        <div class="summary-head"><h3>Gastos mensuales</h3><a href="#" data-tab="presupuesto">Ver todo</a></div>
+        <div class="weekgrid">
+          <div><small>Previsto</small><b>${fmt(budTotal)}</b></div>
+          <div><small>Pagado</small><b class="neg">${fmt(budSpent)}</b></div>
+          <div><small>${budSpent > budTotal ? 'Excedido' : 'Pendiente'}</small><b class="${budSpent > budTotal ? 'neg' : 'pos'}">${fmt(Math.abs(budTotal - budSpent))}</b></div>
+        </div>
+        ${budTotal > 0 ? progress(budSpent, budTotal) : ''}
       </section>
       <section class="card">
-        <div class="summary-head"><h3>Tus fondos y metas</h3><a href="#" data-tab="metas">Ver metas →</a></div>
+        <div class="summary-head"><h3>Fondos y metas</h3><a href="#" data-tab="metas">Ver todo</a></div>
         <div class="reserve-grid">
           <div><span>🛟 Fondo de emergencia</span><b>${fmt(reservedAmounts().emergency)}</b></div>
           <div><span>🌱 Ahorro</span><b>${fmt(reservedAmounts().savings)}</b></div>
         </div>
-        <p class="muted">Total reservado del sueldo: <b>${fmt(reserved)}</b> · acumulado de todos los meses.</p>
-        ${goals.length ? `<div class="home-goals">${goals.map(g => goalRow(g, true)).join('')}</div>` : '<p class="muted">Puedes agregar otras metas y ver su avance aquí.</p>'}
+        ${goals.length ? `<div class="home-goals">${goals.map(g => goalRow(g, false)).join('')}</div>` : ''}
       </section>
       <section class="card"><h3>¿En qué gastas?</h3><div class="donutwrap">${donut}</div></section>
-      <section class="card"><h3>Últimos 6 meses</h3>
-        <p class="muted six-range">${monthLabel(months[0])} – ${monthLabel(months[5])}</p>
+      <section class="card">
+        <div class="summary-head"><h3>Últimos 6 meses</h3><span class="muted">${monthLabel(months[0], true)} – ${monthLabel(months[5], true)}</span></div>
         ${sixChart}
-        <p class="muted">${sixTotal ? 'Proporción de ingresos y gastos del período completo.' : 'Todavía no hay ingresos ni gastos en este período.'}</p>
       </section>
       `;
   },
@@ -1155,7 +1147,7 @@ const views = {
     const cats = budgetCats();
     const addBtn = `<div class="row-end"><button class="btn" data-action="new-budget">+ Agregar categoría</button></div>`;
     if (!cats.length) return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
-      <p class="empty" style="padding:24px 12px">Todavía no tienes categorías en tu presupuesto.<br>Agrega las que quieras controlar, por ejemplo Supermercado o Transporte, con su límite mensual.</p>
+      <p class="empty" style="padding:24px 12px">Aún no tienes gastos mensuales.<br>Agrega los fijos, como arriendo o supermercado.</p>
       ${addBtn}</section>`;
     const rows = cats.map(c => {
       const b = budgetFor(c), s = spent[c] || 0;
@@ -1170,14 +1162,14 @@ const views = {
       </div>`;
     }).join('');
     return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
-      <p class="muted">Planifica el monto y marca «Pagado» cuando salga el dinero. Activa «Repetir cada mes» para tus gastos habituales.</p>${addBtn}${budgetBulkControl()}<div class="budget-items">${rows}</div></section>`;
+      <p class="muted">Planifica tus gastos fijos y márcalos como pagados.</p>${addBtn}${budgetBulkControl()}<div class="budget-items">${rows}</div></section>`;
   },
 
   metas() {
     const goals = live(data.goals);
-    return reservesCard() + `<div class="row-end" style="margin:0 0 14px"><button class="btn" data-action="new-goal">+ Nueva meta o deuda</button></div>
+    return reservesCard() + `<div class="summary-head section-head"><h3>Metas y deudas</h3><button class="slink" data-action="new-goal">+ Nueva</button></div>
       ${goals.length ? goals.map(g => `<section class="card">${goalRow(g, true)}</section>`).join('')
-        : '<p class="empty">También puedes crear otras metas, como unas vacaciones, o registrar una deuda para ir pagándola.</p>'}`;
+        : '<p class="empty">Crea una meta, como unas vacaciones, o registra una deuda.</p>'}`;
   },
 
   ajustes() {

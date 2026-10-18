@@ -670,3 +670,37 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .sselect { width: auto; max-width: 62%; min-height: 0 !important; border: 0; background: transparent; padding: 6px 0; text-align: right; color: var(--muted); font-weight: 500; }
 .sselect:focus { outline: 2px solid var(--accent); border-radius: 8px; }
 .spass { padding: 4px 0 14px; border-top: 1px solid var(--line); }
+
+/* ===== Estilo minimalista en toda la app ===== */
+.card { box-shadow: none; border: 1px solid var(--line); border-radius: 20px; padding: 18px; margin-bottom: 12px; }
+.money { background: var(--card) !important; }
+.card h3, .summary-head h3 { font-size: 1rem; font-weight: 650; margin: 0; }
+.summary-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.summary-head a { font-size: .85rem; font-weight: 600; text-decoration: none; color: var(--accent); white-space: nowrap; }
+.summary-head .muted { margin: 0; font-size: .82rem; text-transform: capitalize; }
+.section-head { margin: 22px 4px 10px; }
+.weekgrid { gap: 6px; margin: 4px 0 12px; }
+.weekgrid small { font-size: .78rem; color: var(--muted); }
+.weekgrid b { font-size: 1.05rem; }
+.weekhead { margin-bottom: 10px; }
+.weekhead .muted { font-size: .82rem; }
+.card .muted { font-size: .85rem; margin-top: 8px; }
+.moneyhead { margin-bottom: 4px; }
+.moneyhead h3 { font-size: .9rem; font-weight: 600; color: var(--muted); }
+.acclist li { padding: 12px 2px; }
+.occasional-total { font-size: 1.6rem; font-weight: 750; letter-spacing: -.02em; margin: 0 0 4px; }
+.reserve-grid > div { border-radius: 14px; }
+.home-goals .goal { padding-top: 12px; border-top: 1px solid var(--line); margin-top: 12px; }
+.goal .budhead b { font-weight: 600; }
+.progress { height: 8px; }
+.donut { width: 150px; height: 150px; }
+.legend li { font-size: .88rem; }
+.txlist { border-radius: 18px; }
+.txlist li { padding: 13px 16px; }
+.txlist i { width: 8px; height: 28px; }
+.day { font-size: .78rem; letter-spacing: .02em; margin: 18px 6px 8px; }
+.seg { border-radius: 14px; }
+.monthbar button { border: 1px solid var(--line); background: var(--card); }
+.row-end .btn { padding: 10px 16px; }
+.weekhead .muted { text-transform: none; }
+.weekhead .muted::first-letter { text-transform: uppercase; }
