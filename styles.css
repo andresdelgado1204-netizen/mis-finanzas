@@ -416,3 +416,19 @@ input:not([type=checkbox]), select, textarea { min-height: 50px; border-radius: 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Navegación inferior también en computadores. */
+@media (min-width: 800px) {
+  body { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 24px); }
+  .tabs {
+    position: fixed; top: auto; bottom: 0; left: 0; right: 0;
+    width: 100%; max-width: none; margin: 0;
+    height: calc(var(--nav-h) + env(safe-area-inset-bottom));
+    padding: 6px max(16px, calc((100% - 760px) / 2)) calc(6px + env(safe-area-inset-bottom));
+    border: 0; border-top: 1px solid var(--line); border-radius: 0; z-index: 6;
+  }
+  .tabs button { flex-direction: column; gap: 4px; font-size: .75rem; min-height: 48px; }
+  .tabs button span { font-size: 1.3rem; }
+  .fab { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px) !important; }
+  .badge { position: absolute; top: 3px; left: calc(50% + 6px); margin-left: 0; }
+}
