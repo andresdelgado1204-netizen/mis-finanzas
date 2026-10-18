@@ -197,12 +197,35 @@ function spentByCat(m) {
 /* ---------- cuentas (efectivo, banco…) ---------- */
 const LS_LASTACC = 'finanzas.ultimaCuenta';
 const accId = t => t.account || 'banco';
-const accounts = () => live(data.accounts);
+const allAccounts = () => live(data.accounts);
+// Preferencia de cada persona: 'ambos' | 'efectivo' | 'banco'
+const accountMode = () => (['efectivo', 'banco'].includes(data.settings.accountMode) ? data.settings.accountMode : 'ambos');
+const accounts = () => {
+  const m = accountMode();
+  return allAccounts().filter(a => m === 'ambos' || (m === 'efectivo' ? a.kind === 'efectivo' : a.kind !== 'efectivo'));
+};
+function setAccountMode(m) {
+  data.settings = Object.assign({}, data.settings, { accountMode: m, updatedAt: now() });
+  // si no hay una cuenta del tipo elegido, se crea (o se recupera la original)
+  const need = m === 'ambos' ? ['efectivo', 'banco'] : [m];
+  for (const kind of need) {
+    const has = allAccounts().some(a => (kind === 'efectivo' ? a.kind === 'efectivo' : a.kind !== 'efectivo'));
+    if (!has) {
+      const id = kind;
+      const i = data.accounts.findIndex(a => a.id === id);
+      const acc = { id, name: kind === 'efectivo' ? 'Efectivo' : 'Banco', kind, initial: 0, updatedAt: now() };
+      if (i >= 0) data.accounts[i] = acc; else data.accounts.push(acc);
+    }
+  }
+  if (m !== 'ambos') { try { localStorage.setItem('finanzas.ultimoMetodo', m === 'efectivo' ? 'efectivo' : 'transferencia'); } catch { } }
+  commit();
+  toast(m === 'ambos' ? 'Usas efectivo y banco' : m === 'efectivo' ? 'Ahora usas solo efectivo' : 'Ahora usas solo banco');
+}
 const accName = id => (data.accounts.find(a => a.id === id && !a.deleted) || { name: 'Cuenta eliminada' }).name;
 const accIcon = a => (a.kind === 'efectivo' ? '💵' : '🏦');
 function balances() {
   const bal = {};
-  for (const a of accounts()) bal[a.id] = a.initial || 0;
+  for (const a of allAccounts()) bal[a.id] = a.initial || 0;
   const addTo = (id, v) => { bal[id] = (bal[id] || 0) + v; };
   for (const t of live(data.transactions)) {
     if (t.type === 'ingreso' || t.type === 'ajuste') addTo(accId(t), t.amount);
@@ -1049,7 +1072,7 @@ const views = {
           <b class="${(accBal[a.id] || 0) < 0 ? 'neg' : ''}">${fmt(accBal[a.id] || 0)}</b></li>`).join('')}</ul>
         <div class="row-end">
           <button class="btn ghost" data-action="new-acc">+ Cuenta</button>
-          <button class="btn ghost" data-action="new-transfer">⇄ Mover dinero</button>
+          ${accs.length >= 2 ? '<button class="btn ghost" data-action="new-transfer">⇄ Mover dinero</button>' : ''}
         </div>
       </section>
       ${isAdmin() ? weekCard() : monthlyPayCard()}
@@ -1149,6 +1172,16 @@ const views = {
         <div class="row-end"><button class="btn ghost danger" data-action="logout">Cerrar sesión</button></div>
       </section>
 
+      <section class="card"><h3>Tus cuentas</h3>
+        <p class="muted" style="margin-bottom:12px">Elige con qué manejas tu dinero. La app solo mostrará esas cuentas. Puedes elegir solo efectivo, solo banco o ambos.</p>
+        <div class="seg accmode">
+          ${[['efectivo', '💵 Efectivo'], ['banco', '🏦 Banco'], ['ambos', 'Ambos']].map(([v, l]) =>
+            `<button type="button" class="${accountMode() === v ? 'on' : ''}" data-action="acc-mode" data-v="${v}">${l}</button>`).join('')}
+        </div>
+        ${accountMode() !== 'ambos' && allAccounts().length > accounts().length
+          ? '<p class="muted">Tus otras cuentas quedan ocultas, no se borran. Puedes volver a mostrarlas eligiendo «Ambos».</p>' : ''}
+      </section>
+
       ${window.PREVIEW ? '' : `<section class="card"><h3>Cambiar contraseña</h3>
         <form id="passForm" class="form">
           <input type="text" name="username" autocomplete="username" value="${esc(cloud.user ? (isUsernameAccount(cloud.user.email) ? shownName(cloud.user.email).replace('@finanzas', '') : cloud.user.email) : '')}" hidden>
@@ -1205,7 +1238,7 @@ function setTxType(type, selected) {
   $('#txForm').category.required = !isTr && type !== 'gasto';
   $('#toLabel').hidden = !isTr;
   $('#accLabel').textContent = isTr ? 'Desde' : 'Pagado con';
-  $('#payMethodWrap').hidden = type !== 'ingreso';
+  $('#payMethodWrap').hidden = type !== 'ingreso' || accountMode() !== 'ambos';
   $('#accField').hidden = type === 'ingreso';
   if (!isTr) fillCategories(type, selected);
   const nameField = $('#txForm').newCategory;
@@ -1244,7 +1277,9 @@ function openTx(tx) {
   setTxType(tx ? tx.type : 'gasto', tx?.category);
   let pm = 'transferencia';
   try { pm = localStorage.getItem('finanzas.ultimoMetodo') || pm; } catch { }
-  setPayMethod(tx && tx.type === 'ingreso' ? methodOf(tx) : pm);
+  if (accountMode() === 'efectivo') pm = 'efectivo';
+  else if (accountMode() === 'banco') pm = 'transferencia';
+  setPayMethod(tx && tx.type === 'ingreso' && accountMode() === 'ambos' ? methodOf(tx) : pm);
   f.amount.value = tx ? tx.amount : '';
   f.date.value = tx ? tx.date : (ui.month === thisMonth() ? today() : ui.month + '-01');
   f.note.value = tx?.note || '';
@@ -1290,6 +1325,9 @@ function openAcc(a) {
   const f = $('#accForm');
   f.reset();
   $('#accTitle').textContent = a ? 'Editar cuenta' : 'Nueva cuenta';
+  const m = accountMode();
+  [...f.kind.options].forEach(o => { o.disabled = m !== 'ambos' && !a && o.value !== m; });
+  if (!a && m !== 'ambos') f.kind.value = m;
   $('#accDelete').hidden = !a;
   $('#accAdjust').hidden = !a;
   if (a) {
@@ -1486,6 +1524,7 @@ document.addEventListener('click', e => {
       break;
     }
     case 'new-acc': openAcc(); break;
+    case 'acc-mode': if (el.dataset.v !== accountMode()) setAccountMode(el.dataset.v); break;
     case 'new-budget': openBudget(); break;
     case 'del-budget': {
       const cat = el.dataset.cat;

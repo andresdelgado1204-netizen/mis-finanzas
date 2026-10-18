@@ -577,3 +577,7 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
   .donutwrap .legend b { font-size: .84rem; max-width: 38vw; overflow-wrap: anywhere; }
   .donutwrap .legend span { word-break: normal; }
 }
+
+/* Ajustes: tipo de cuentas */
+.seg.accmode { margin-bottom: 4px; }
+.seg.accmode button { font-size: .88rem; padding: 10px 6px; }
