@@ -704,3 +704,28 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .row-end .btn { padding: 10px 16px; }
 .weekhead .muted { text-transform: none; }
 .weekhead .muted::first-letter { text-transform: uppercase; }
+
+/* ===== Modo claro más limpio ===== */
+:root, :root[data-theme="light"] {
+  --text: #172033;
+  --muted: #667085;
+  --card: #ffffff;
+  --line: #e7e9ee;
+  --pos: #157347;
+  --neg: #c43d3d;
+}
+:root[data-accent], :root[data-theme="light"][data-accent] {
+  --bg: color-mix(in srgb, var(--btn) 3%, #f7f8fa);
+  --line: #e7e9ee;
+  --accent-soft: color-mix(in srgb, var(--btn) 9%, #ffffff);
+}
+:root:not([data-theme="dark"]) .card { box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 2px 8px rgba(16, 24, 40, .03); }
+:root:not([data-theme="dark"]) .money { border-color: var(--line) !important; background: var(--card) !important; }
+:root:not([data-theme="dark"]) .tabs { background: rgba(255, 255, 255, .94); border-top-color: var(--line); box-shadow: 0 -1px 0 var(--line); }
+:root:not([data-theme="dark"]) .monthbar button,
+:root:not([data-theme="dark"]) .sync { background: #fff; border-color: var(--line); }
+:root:not([data-theme="dark"]) .btn.ghost, :root:not([data-theme="dark"]) .btn.outline { background: #fff; border-color: var(--line); }
+:root:not([data-theme="dark"]) input, :root:not([data-theme="dark"]) select, :root:not([data-theme="dark"]) textarea { background: #f8f9fb; border-color: var(--line); }
+:root:not([data-theme="dark"]) .seg { background: #eef0f3; }
+:root:not([data-theme="dark"]) .reserve-grid > div { background: var(--accent-soft); }
+:root:not([data-theme="dark"]) .curchip { background: var(--accent-soft); }
