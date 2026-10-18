@@ -82,10 +82,55 @@ function fmt(n) {
   } catch { return (n || 0).toLocaleString('es-CL'); }
 }
 const txOfMonth = m => live(data.transactions).filter(t => t.date && t.date.startsWith(m));
+/* Reservas guardadas en el propio sueldo: sin movimientos duplicados. */
+function reserveRates() {
+  const raw = data.settings.salaryReserves || { emergency: 10, savings: 10 };
+  const emergency = Math.max(0, Math.min(100, Number(raw.emergency) || 0));
+  const savings = Math.max(0, Math.min(100 - emergency, Number(raw.savings) || 0));
+  return { emergency, savings };
+}
+function salaryReserves(amount, rates) {
+  const scale = data.settings.currency === 'CLP' ? 1 : 100;
+  const emergency = Math.floor(amount * rates.emergency / 100 * scale) / scale;
+  const savings = Math.floor(amount * rates.savings / 100 * scale) / scale;
+  return { emergency, savings, rates: { ...rates } };
+}
+function reservedAmounts(txs = live(data.transactions)) {
+  return txs.reduce((out, t) => {
+    if (t.type === 'ingreso' && t.category === 'Sueldo' && t.reserves) {
+      out.emergency += Number(t.reserves.emergency) || 0;
+      out.savings += Number(t.reserves.savings) || 0;
+    }
+    out.total = out.emergency + out.savings;
+    return out;
+  }, { emergency: 0, savings: 0, total: 0 });
+}
+function reservesCard() {
+  const rates = reserveRates(), saved = reservedAmounts();
+  const period = isAdmin() ? 'semanal' : 'mensual';
+  return `<section class="card reserves"><h3>Separa parte de tu sueldo</h3>
+    <p class="muted">De cada sueldo ${period} nuevo se reserva una parte para tus dos fondos. Otros ingresos quedan completos.</p>
+    <div class="reserve-grid">
+      <div><span>🛟 Fondo de emergencia</span><b>${fmt(saved.emergency)}</b></div>
+      <div><span>🌱 Ahorro</span><b>${fmt(saved.savings)}</b></div>
+    </div>
+    <form id="reservesForm" class="form">
+      <div class="reserve-grid">
+        <label>Emergencia (%)<input name="emergency" type="number" min="0" max="100" step="0.1" value="${rates.emergency}" required inputmode="decimal"></label>
+        <label>Ahorro (%)<input name="savings" type="number" min="0" max="100" step="0.1" value="${rates.savings}" required inputmode="decimal"></label>
+      </div>
+      <p class="muted">Disponible para gastar: ${100 - rates.emergency - rates.savings}% de cada sueldo. Usa 0% para desactivar un fondo.</p>
+      <button class="btn wide">Guardar porcentajes</button>
+    </form>
+    <p class="muted">Se aplica a nuevos movimientos de categoría «Sueldo». Los sueldos anteriores no cambian. Es una reserva en la app: el dinero permanece en tu banco o efectivo y no se registra como gasto.</p>
+  </section>`;
+}
+
 function totals(m) {
   let inc = 0, exp = 0;
   for (const t of txOfMonth(m)) { if (t.type === 'ingreso') inc += t.amount; else if (t.type === 'gasto') exp += t.amount; }
-  return { inc, exp, bal: inc - exp };
+  const reserved = reservedAmounts(txOfMonth(m)).total;
+  return { inc, exp, reserved, bal: inc - exp - reserved };
 }
 function spentByCat(m) {
   const o = {};
@@ -153,7 +198,8 @@ function monthlyPayCard() {
     if (t.type === 'ingreso') inc += t.amount;
     else if (t.type === 'gasto') exp += t.amount;
   }
-  const left = inc - exp;
+  const reserved = reservedAmounts(txs).total;
+  const left = inc - exp - reserved;
   const pays = txs.filter(isPay);
   const paid = pays.reduce((sum, t) => sum + t.amount, 0);
   const first = month + '-01';
@@ -166,9 +212,10 @@ function monthlyPayCard() {
     <div class="weekgrid">
       <div><small>Recibiste</small><b class="pos">${fmt(inc)}</b></div>
       <div><small>Gastaste</small><b class="neg">${fmt(exp)}</b></div>
-      <div><small>Te queda</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
+      <div><small>Disponible</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
     </div>
-    ${inc > 0 ? progress(exp, inc) : ''}
+    ${reserved > 0 ? `<p class="muted">Reservado para emergencia y ahorro: <b>${fmt(reserved)}</b> · descontado del disponible.</p>` : ''}
+    ${inc > 0 ? progress(exp + reserved, inc) : ''}
     ${inc > 0 && left > 0 && current < next ? `<p class="muted">Puedes gastar unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta fin de mes.</p>` : ''}
     ${pays.length ? `<p class="payok">✓ Pago del mes registrado: ${fmt(paid)}</p>` : `<button class="btn wide" data-action="pay-month" data-date="${date}">Registrar pago del mes</button>`}
     <p class="muted">Resumen del mes completo. Puedes registrar ingresos adicionales en Movimientos.</p>
@@ -180,7 +227,8 @@ function weekCard() {
   const txs = live(data.transactions).filter(t => t.date >= ws && t.date <= we);
   let inc = 0, exp = 0;
   for (const t of txs) { if (t.type === 'ingreso') inc += t.amount; else if (t.type === 'gasto') exp += t.amount; }
-  const left = inc - exp;
+  const reserved = reservedAmounts(txs).total;
+  const left = inc - exp - reserved;
   const pay = txs.find(isPay);
   const t = today();
   const notYet = t < ws;
@@ -199,9 +247,10 @@ function weekCard() {
     <div class="weekgrid">
       <div><small>Recibiste</small><b class="pos">${fmt(inc)}</b></div>
       <div><small>Gastaste</small><b class="neg">${fmt(exp)}</b></div>
-      <div><small>Te queda</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
+      <div><small>Disponible</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
     </div>
-    ${inc > 0 ? progress(exp, inc) : ''}
+    ${reserved > 0 ? `<p class="muted">Reservado para emergencia y ahorro: <b>${fmt(reserved)}</b> · descontado del disponible.</p>` : ''}
+    ${inc > 0 ? progress(exp + reserved, inc) : ''}
     ${inc > 0 && left > 0 ? `<p class="muted">Puedes gastar unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta el próximo pago.</p>` : ''}
     ${payLine}
     <p class="muted">${nextLine} · ${monthLabel(m).split(' ')[0]} tiene ${paydaysInMonth(m)} ${dayName.endsWith('s') ? dayName : dayName + 's'} de pago.</p>
@@ -503,7 +552,7 @@ function viewerHTML() {
       <div class="moneyhead"><span>Dinero total</span><b class="${total < 0 ? 'neg' : ''}">${fmt(total)}</b></div>
       <ul class="acclist ro">${accs.map(a => `<li><span class="accicon">${accIcon(a)}</span><span class="accname">${esc(a.name)}</span><b>${fmt(bal[a.id] || 0)}</b></li>`).join('')}</ul>
       <div class="weekgrid"><div><small>Ingresos ${monthLabel(ui.month).split(' ')[0]}</small><b class="pos">${fmt(inc)}</b></div>
-        <div><small>Gastos</small><b class="neg">${fmt(exp)}</b></div><div><small>Balance</small><b class="${net >= 0 ? 'pos' : 'neg'}">${fmt(net)}</b></div></div>
+        <div><small>Gastos</small><b class="neg">${fmt(exp)}</b></div><div><small>Disponible del mes</small><b class="${net >= 0 ? 'pos' : 'neg'}">${fmt(net)}</b></div></div>
       <h4 class="day">Últimos movimientos</h4>
       ${rows ? `<ul class="txlist ro">${rows}</ul>` : '<p class="muted">Todavía no registra movimientos.</p>'}
     </section>`;
@@ -853,9 +902,11 @@ const views = {
     const accBal = balances();
     const accs = accounts();
     const total = accs.reduce((s, a) => s + (accBal[a.id] || 0), 0);
+    const reserved = reservedAmounts().total;
     return `
       <section class="card money">
         <div class="moneyhead"><h3>Mi dinero</h3><b class="${total < 0 ? 'neg' : ''}">${fmt(total)}</b></div>
+        ${reserved > 0 ? `<p class="muted">Reservado: ${fmt(reserved)} · Disponible: <b>${fmt(total - reserved)}</b></p>` : ''}
         <ul class="acclist">${accs.map(a => `<li data-action="edit-acc" data-id="${a.id}">
           <span class="accicon">${accIcon(a)}</span><span class="accname">${esc(a.name)}</span>
           <b class="${(accBal[a.id] || 0) < 0 ? 'neg' : ''}">${fmt(accBal[a.id] || 0)}</b></li>`).join('')}</ul>
@@ -868,7 +919,7 @@ const views = {
       <section class="cards3">
         <div class="card stat"><small>Ingresos</small><b class="pos">${fmt(inc)}</b></div>
         <div class="card stat"><small>Gastos</small><b class="neg">${fmt(exp)}</b></div>
-        <div class="card stat"><small>Balance</small><b class="${bal >= 0 ? 'pos' : 'neg'}">${fmt(bal)}</b></div>
+        <div class="card stat"><small>Disponible del mes</small><b class="${bal >= 0 ? 'pos' : 'neg'}">${fmt(bal)}</b></div>
       </section>
       ${budTotal ? `<section class="card"><h3>Presupuesto del mes</h3>${progress(budSpent, budTotal)}
         <p class="muted">${fmt(budSpent)} de ${fmt(budTotal)} · disponible ${fmt(Math.max(0, budTotal - budSpent))}
@@ -916,9 +967,9 @@ const views = {
 
   metas() {
     const goals = live(data.goals);
-    return `<div class="row-end" style="margin:0 0 14px"><button class="btn" data-action="new-goal">+ Nueva meta o deuda</button></div>
+    return reservesCard() + `<div class="row-end" style="margin:0 0 14px"><button class="btn" data-action="new-goal">+ Nueva meta o deuda</button></div>
       ${goals.length ? goals.map(g => `<section class="card">${goalRow(g, true)}</section>`).join('')
-        : '<p class="empty">Crea una meta de ahorro (por ejemplo, un fondo de emergencia) o registra una deuda para ir pagándola.</p>'}`;
+        : '<p class="empty">También puedes crear otras metas, como unas vacaciones, o registrar una deuda para ir pagándola.</p>'}`;
   },
 
   ajustes() {
@@ -1054,6 +1105,7 @@ function txRow(t) {
     sub = t.type === 'ingreso' ? (methodOf(t) === 'efectivo' ? '💵 Efectivo' : '🏦 Transferencia') : esc(accName(accId(t)));
     amount = (t.type === 'ingreso' ? '+' : '−') + fmt(t.amount); cls = t.type === 'ingreso' ? 'pos' : 'neg';
   }
+  if (t.reserves && t.type === 'ingreso' && t.category === 'Sueldo') sub += ` · Emergencia ${fmt(t.reserves.emergency)} · Ahorro ${fmt(t.reserves.savings)}`;
   const color = t.type === 'transferencia' || t.type === 'ajuste' ? 'var(--muted)' : catColor(t.category);
   return `<li data-action="edit-tx" data-id="${t.id}">
     <i style="background:${color}"></i>
@@ -1305,6 +1357,9 @@ $('#txForm').addEventListener('submit', e => {
       if (!account) { toast(payMethod === 'efectivo' ? 'Crea una cuenta de efectivo en Inicio' : 'Crea una cuenta bancaria en Inicio'); return; }
       try { localStorage.setItem('finanzas.ultimoMetodo', payMethod); } catch { }
     } else rememberAccount(account);
+    if (txType === 'ingreso' && f.category.value === 'Sueldo' && (!editingTx || editingTx.reserves)) {
+      base.reserves = salaryReserves(amount, editingTx?.reserves?.rates || reserveRates());
+    }
     upsert('transactions', Object.assign(base, { category: f.category.value, account }));
   }
   $('#txDialog').close();
@@ -1416,6 +1471,16 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'reservesForm') {
+    e.preventDefault();
+    const emergency = Number(e.target.emergency.value), savings = Number(e.target.savings.value);
+    if (![emergency, savings].every(n => Number.isFinite(n) && n >= 0 && n <= 100) || emergency + savings > 100) {
+      toast('Los porcentajes deben sumar como máximo 100%'); return;
+    }
+    data.settings.salaryReserves = { emergency, savings };
+    data.settings.updatedAt = now();
+    commit(); toast('Porcentajes guardados para los próximos sueldos'); return;
+  }
   if (e.target.id === 'budgetForm') {
     e.preventDefault();
     const f = e.target;
@@ -1513,7 +1578,7 @@ document.addEventListener('submit', e => {
     const lines = s => [...new Set(s.split('\n').map(x => x.trim()).filter(Boolean))];
     const gasto = lines(f.gasto.value), ingreso = lines(f.ingreso.value);
     if (!gasto.length || !ingreso.length) { toast('Deja al menos una categoría de cada tipo'); return; }
-    data.settings = { currency: f.currency.value, startMonth: f.startMonth.value, payday: Number(f.payday.value), categories: { gasto, ingreso }, updatedAt: now() };
+    data.settings = { ...data.settings, currency: f.currency.value, startMonth: f.startMonth.value, payday: Number(f.payday.value), categories: { gasto, ingreso }, updatedAt: now() };
     if (ui.month < data.settings.startMonth) ui.month = data.settings.startMonth;
     commit(); toast('Preferencias guardadas');
   }
