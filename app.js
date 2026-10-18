@@ -1071,7 +1071,8 @@ const views = {
           <span class="accicon">${accIcon(a)}</span><span class="accname">${esc(a.name)}</span>
           <b class="${(accBal[a.id] || 0) < 0 ? 'neg' : ''}">${fmt(accBal[a.id] || 0)}</b></li>`).join('')}</ul>
         <div class="row-end">
-          <button class="btn ghost" data-action="new-acc">+ Cuenta</button>
+          ${accountMode() === 'ambos' ? '<button class="btn ghost" data-action="new-acc">+ Cuenta</button>'
+            : `<button class="btn" data-action="add-money">${accountMode() === 'efectivo' ? '+ Agregar efectivo' : '+ Agregar dinero'}</button>`}
           ${accs.length >= 2 ? '<button class="btn ghost" data-action="new-transfer">⇄ Mover dinero</button>' : ''}
         </div>
       </section>
@@ -1504,6 +1505,14 @@ document.addEventListener('click', e => {
     case 'next-month': ui.month = shiftMonth(ui.month, 1); render(); break;
     case 'filter': ui.filter = el.dataset.v; render(); break;
     case 'new-tx': openTx(); break;
+    case 'add-money': {
+      // abre el formulario de ingreso directo a la cuenta que usa (efectivo o banco)
+      openTx();
+      setTxType('ingreso', 'Otros ingresos');
+      setPayMethod(accountMode() === 'efectivo' ? 'efectivo' : 'transferencia');
+      $('#txTitle').textContent = accountMode() === 'efectivo' ? 'Agregar efectivo' : 'Agregar dinero al banco';
+      break;
+    }
     case 'edit-tx': {
       const t = data.transactions.find(t => t.id === id);
       if (t?.type === 'ajuste') {
