@@ -56,7 +56,7 @@ function writeJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } c
 
 /* ---------- datos ---------- */
 function emptyData() {
-  return { version: 1, settings: { currency: 'CLP', startMonth: '2026-11', categories: clone(DEFAULT_CATS), updatedAt: 0 }, transactions: [], budgets: [], goals: [], accounts: clone(DEFAULT_ACCOUNTS) };
+  return { version: 1, settings: { currency: 'CLP', startMonth: '2026-11', payday: 5, categories: clone(DEFAULT_CATS), updatedAt: 0 }, transactions: [], budgets: [], goals: [], accounts: clone(DEFAULT_ACCOUNTS) };
 }
 function normalize(d) {
   const base = emptyData();
@@ -118,6 +118,65 @@ function lastAccount() {
 function rememberAccount(id) { try { localStorage.setItem(LS_LASTACC, id); } catch { } }
 function accOptions(selected) {
   return accounts().map(a => `<option value="${a.id}" ${a.id === selected ? 'selected' : ''}>${accIcon(a)} ${esc(a.name)}</option>`).join('');
+}
+
+/* ---------- semana de pago (pago semanal) ---------- */
+const DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const payday = () => (Number.isInteger(data.settings.payday) ? data.settings.payday : 5);
+const parseD = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const fmtD = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const addDays = (s, n) => { const d = parseD(s); d.setDate(d.getDate() + n); return fmtD(d); };
+const daysBetween = (a, b) => Math.round((parseD(b) - parseD(a)) / 86400000);
+const shortDay = s => parseD(s).toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
+function weekStart(s) { const d = parseD(s); d.setDate(d.getDate() - (d.getDay() - payday() + 7) % 7); return fmtD(d); }
+function firstPaydayFrom(s) { const d = parseD(s); d.setDate(d.getDate() + (payday() - d.getDay() + 7) % 7); return fmtD(d); }
+// Día de referencia: hoy, o el primer día de pago si aún no empiezas a registrar
+function refDay() {
+  const start = startMonth() ? startMonth() + '-01' : '';
+  return today() < start ? firstPaydayFrom(start) : today();
+}
+function paydaysInMonth(m) {
+  let d = firstPaydayFrom(m + '-01'), n = 0;
+  while (d.startsWith(m)) { n++; d = addDays(d, 7); }
+  return n;
+}
+const isPay = t => t.type === 'ingreso' && t.category === 'Sueldo';
+function lastPay() {
+  return live(data.transactions).filter(isPay).sort((a, b) => b.date.localeCompare(a.date))[0];
+}
+function methodOf(t) { return (data.accounts.find(a => a.id === accId(t)) || {}).kind === 'efectivo' ? 'efectivo' : 'transferencia'; }
+
+function weekCard() {
+  const ws = weekStart(refDay()), we = addDays(ws, 6), next = addDays(ws, 7);
+  const txs = live(data.transactions).filter(t => t.date >= ws && t.date <= we);
+  let inc = 0, exp = 0;
+  for (const t of txs) { if (t.type === 'ingreso') inc += t.amount; else if (t.type === 'gasto') exp += t.amount; }
+  const left = inc - exp;
+  const pay = txs.find(isPay);
+  const t = today();
+  const notYet = t < ws;
+  const daysLeft = Math.max(1, daysBetween(notYet ? ws : t, next));
+  const untilNext = daysBetween(t, notYet ? ws : next);
+  const dayName = DAYS[payday()];
+  const nextLine = notYet
+    ? `Primer pago: ${dayName} ${shortDay(ws).replace(/^\S+\s/, '')} · en ${untilNext} días`
+    : `Próximo pago: ${dayName} ${shortDay(next).replace(/^\S+\s/, '')} · ${untilNext === 1 ? 'mañana' : `en ${untilNext} días`}`;
+  const payLine = pay
+    ? `<p class="payok">✓ Pago registrado: ${fmt(pay.amount)} en ${methodOf(pay) === 'efectivo' ? 'efectivo' : 'transferencia'}</p>`
+    : `<button class="btn wide" data-action="pay-week" data-date="${ws}">Registrar pago del ${dayName}</button>`;
+  const m = ws.slice(0, 7);
+  return `<section class="card week">
+    <div class="weekhead"><h3>Semana de pago</h3><span class="muted">${shortDay(ws)} – ${shortDay(we)}</span></div>
+    <div class="weekgrid">
+      <div><small>Recibiste</small><b class="pos">${fmt(inc)}</b></div>
+      <div><small>Gastaste</small><b class="neg">${fmt(exp)}</b></div>
+      <div><small>Te queda</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
+    </div>
+    ${inc > 0 ? progress(exp, inc) : ''}
+    ${inc > 0 && left > 0 ? `<p class="muted">Puedes gastar unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta el próximo pago.</p>` : ''}
+    ${payLine}
+    <p class="muted">${nextLine} · ${monthLabel(m).split(' ')[0]} tiene ${paydaysInMonth(m)} ${dayName.endsWith('s') ? dayName : dayName + 's'} de pago.</p>
+  </section>`;
 }
 
 function budgetFor(cat) { const b = data.budgets.find(b => b.id === 'b:' + cat && !b.deleted); return b ? b.amount : 0; }
@@ -357,6 +416,7 @@ const views = {
           <button class="btn ghost" data-action="new-transfer">⇄ Mover dinero</button>
         </div>
       </section>
+      ${weekCard()}
       <section class="cards3">
         <div class="card stat"><small>Ingresos</small><b class="pos">${fmt(inc)}</b></div>
         <div class="card stat"><small>Gastos</small><b class="neg">${fmt(exp)}</b></div>
@@ -433,6 +493,7 @@ const views = {
             if (startMonth() && !opts.includes(startMonth())) opts.unshift(startMonth());
             return opts.map(x => `<option value="${x}" ${x === startMonth() ? 'selected' : ''}>${monthLabel(x)}</option>`).join('');
           })()}</select></label>
+          <label>Me pagan cada semana el día<select name="payday">${DAYS.map((d, i) => `<option value="${i}" ${i === payday() ? 'selected' : ''}>${d}</option>`).join('')}</select></label>
           <label>Moneda<select name="currency">${CURRENCIES.map(x => `<option ${x === data.settings.currency ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
           <label>Categorías de gasto (una por línea)<textarea name="gasto" rows="7">${esc(c.gasto.join('\n'))}</textarea></label>
           <label>Categorías de ingreso (una por línea)<textarea name="ingreso" rows="4">${esc(c.ingreso.join('\n'))}</textarea></label>
@@ -479,8 +540,20 @@ function setTxType(type, selected) {
   $('#catLabel').hidden = isTr;
   $('#txForm').category.required = !isTr;
   $('#toLabel').hidden = !isTr;
-  $('#accLabel').textContent = isTr ? 'Desde' : type === 'ingreso' ? 'Entra a' : 'Pagado con';
+  $('#accLabel').textContent = isTr ? 'Desde' : 'Pagado con';
+  $('#payMethodWrap').hidden = type !== 'ingreso';
+  $('#accField').hidden = type === 'ingreso';
   if (!isTr) fillCategories(type, selected);
+}
+let payMethod = 'transferencia';
+function setPayMethod(m) {
+  payMethod = m;
+  $('#payMethod').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.method === m));
+}
+function methodAccount(m) {
+  const cash = accounts().find(a => a.kind === 'efectivo');
+  const bank = accounts().find(a => a.id === lastAccount() && a.kind !== 'efectivo') || accounts().find(a => a.kind !== 'efectivo');
+  return ((m === 'efectivo' ? cash : bank) || {}).id;
 }
 function openTx(tx) {
   editingTx = tx || null;
@@ -493,6 +566,9 @@ function openTx(tx) {
   const other = (accounts().find(a => a.id !== from) || {}).id;
   f.to.innerHTML = accOptions(tx?.to || other);
   setTxType(tx ? tx.type : 'gasto', tx?.category);
+  let pm = 'transferencia';
+  try { pm = localStorage.getItem('finanzas.ultimoMetodo') || pm; } catch { }
+  setPayMethod(tx && tx.type === 'ingreso' ? methodOf(tx) : pm);
   f.amount.value = tx ? tx.amount : '';
   f.date.value = tx ? tx.date : (ui.month === thisMonth() ? today() : ui.month + '-01');
   f.note.value = tx?.note || '';
@@ -519,7 +595,8 @@ function txRow(t) {
     title = 'Ajuste de saldo'; sub = esc(accName(accId(t)));
     amount = (t.amount >= 0 ? '+' : '−') + fmt(Math.abs(t.amount)); cls = 'neutral';
   } else {
-    title = esc(t.category); sub = esc(accName(accId(t)));
+    title = esc(t.category);
+    sub = t.type === 'ingreso' ? (methodOf(t) === 'efectivo' ? '💵 Efectivo' : '🏦 Transferencia') : esc(accName(accId(t)));
     amount = (t.type === 'ingreso' ? '+' : '−') + fmt(t.amount); cls = t.type === 'ingreso' ? 'pos' : 'neg';
   }
   const color = t.type === 'transferencia' || t.type === 'ajuste' ? 'var(--muted)' : catColor(t.category);
@@ -634,6 +711,16 @@ document.addEventListener('click', e => {
     case 'new-transfer':
       if (accounts().length < 2) { toast('Necesitas al menos dos cuentas'); break; }
       openTransfer(); break;
+    case 'pay-week': {
+      const lp = lastPay();
+      openTx();
+      const f = $('#txForm');
+      setTxType('ingreso', 'Sueldo');
+      if (lp) { f.amount.value = lp.amount; setPayMethod(methodOf(lp)); }
+      f.date.value = el.dataset.date;
+      f.note.value = 'Pago semanal';
+      break;
+    }
     case 'new-acc': openAcc(); break;
     case 'edit-acc': openAcc(data.accounts.find(a => a.id === id)); break;
     case 'new-goal': openGoal(); break;
@@ -661,6 +748,10 @@ document.addEventListener('click', e => {
   }
 });
 
+$('#payMethod').addEventListener('click', e => {
+  const b = e.target.closest('[data-method]');
+  if (b) setPayMethod(b.dataset.method);
+});
 $('#txType').addEventListener('click', e => {
   const b = e.target.closest('[data-type]');
   if (b) setTxType(b.dataset.type);
@@ -676,8 +767,13 @@ $('#txForm').addEventListener('submit', e => {
     if (f.account.value === f.to.value) { toast('Elige dos cuentas distintas'); return; }
     upsert('transactions', Object.assign(base, { category: 'Transferencia', from: f.account.value, to: f.to.value }));
   } else {
-    rememberAccount(f.account.value);
-    upsert('transactions', Object.assign(base, { category: f.category.value, account: f.account.value }));
+    let account = f.account.value;
+    if (txType === 'ingreso') {
+      account = methodAccount(payMethod);
+      if (!account) { toast(payMethod === 'efectivo' ? 'Crea una cuenta de efectivo en Inicio' : 'Crea una cuenta bancaria en Inicio'); return; }
+      try { localStorage.setItem('finanzas.ultimoMetodo', payMethod); } catch { }
+    } else rememberAccount(account);
+    upsert('transactions', Object.assign(base, { category: f.category.value, account }));
   }
   $('#txDialog').close();
   if (txType === 'gasto' && !editingTx) {
@@ -794,7 +890,7 @@ document.addEventListener('submit', e => {
     const lines = s => [...new Set(s.split('\n').map(x => x.trim()).filter(Boolean))];
     const gasto = lines(f.gasto.value), ingreso = lines(f.ingreso.value);
     if (!gasto.length || !ingreso.length) { toast('Deja al menos una categoría de cada tipo'); return; }
-    data.settings = { currency: f.currency.value, startMonth: f.startMonth.value, categories: { gasto, ingreso }, updatedAt: now() };
+    data.settings = { currency: f.currency.value, startMonth: f.startMonth.value, payday: Number(f.payday.value), categories: { gasto, ingreso }, updatedAt: now() };
     if (ui.month < data.settings.startMonth) ui.month = data.settings.startMonth;
     commit(); toast('Preferencias guardadas');
   }

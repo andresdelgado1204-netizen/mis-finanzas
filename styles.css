@@ -150,6 +150,20 @@ h4 { margin: 0; }
 .acclist b, .stat b, .txlist span, .legend b { font-variant-numeric: tabular-nums; }
 .neutral { color: var(--muted); }
 
+/* Semana de pago */
+.weekhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.weekhead h3 { margin: 0; }
+.weekhead .muted { margin: 0; text-transform: capitalize; }
+.weekgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 10px; }
+.weekgrid > div { min-width: 0; }
+.weekgrid small { display: block; color: var(--muted); font-size: .78rem; }
+.weekgrid b { display: block; font-variant-numeric: tabular-nums; font-size: clamp(.85rem, 3.9vw, 1.1rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.payok { color: var(--pos); font-weight: 600; font-size: .9rem; margin: 10px 0 0; }
+.week .btn.wide { margin-top: 12px; }
+.field { margin-bottom: 12px; }
+.field .seg { margin: 4px 0 0; }
+.flabel { display: block; font-size: .85rem; color: var(--muted); }
+
 /* Barras de progreso */
 .progress { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
 .progress span { display: block; height: 100%; background: var(--pos); border-radius: inherit; transition: width .3s; }
