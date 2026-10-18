@@ -839,7 +839,7 @@ function renderSyncStatus() {
   const det = $('#syncDetail');
   if (det) det.textContent = cloud.error ? '⚠️ ' + cloud.error
     : cloud.state === 'offline' ? 'Sin conexión: lo que anotes se guarda aquí y se sube solo cuando vuelva internet.'
-    : 'Tus datos se guardan en la nube y se ven al instante en todos tus dispositivos.';
+    : '';
 }
 window.addEventListener('online', () => { if (cloud.user) { setCloud(cloud.writing ? 'saving' : 'ok'); cloudPush(); } });
 window.addEventListener('offline', () => { if (cloud.user) setCloud('offline'); });
@@ -1181,75 +1181,73 @@ const views = {
   },
 
   ajustes() {
-    const c = data.settings.categories;
-    return `
-      <section class="card"><h3>Tu cuenta</h3>
-        <p class="acctline">${window.PREVIEW ? 'Vista previa (sin cuenta)' : `Ingresaste como <b>${esc(cloud.user ? shownName(cloud.user.email) : '')}</b>`}</p>
-        ${window.PREVIEW ? '' : `<form id="myNameForm" class="form namerow">
-          <label>Tu nombre<input name="name" maxlength="40" value="${esc(myName())}" autocomplete="name" required></label>
-          <button class="btn ghost">Guardar</button>
-        </form>`}
-        <p id="syncDetail" class="muted"></p>
-        <div class="lockrow">
-          <div><b>Entrar con Face ID / huella</b>
-            <small>${lockInfo() ? 'Activado en este dispositivo: entras sin escribir tu contraseña.' : 'Entra a la app con Face ID, Touch ID o tu huella en este dispositivo.'}</small></div>
-          <button class="btn ${lockInfo() ? 'ghost' : ''}" data-action="lock-toggle">${lockInfo() ? 'Desactivar' : 'Activar'}</button>
+    const login = cloud.user ? (isUsernameAccount(cloud.user.email) ? shownName(cloud.user.email).replace('@finanzas', '') : cloud.user.email) : '';
+    const name = window.PREVIEW ? 'Vista previa' : myName();
+    const sw = (on, action, label, extra = '') => `<button type="button" class="switch ${on ? 'on' : ''}" role="switch" aria-checked="${on}" aria-label="${label}" data-action="${action}" ${extra}><i></i></button>`;
+    const moneyRow = (k, ico, label) => {
+      const on = accountMode() === 'ambos' || accountMode() === k;
+      return `<div class="srow"><span><span class="sico">${ico}</span>${label}</span>${sw(on, 'acc-toggle', 'Mostrar ' + label, `data-k="${k}"`)}</div>`;
+    };
+    return `<div class="settings">
+      <section class="card sprofile">
+        <div class="avatar" aria-hidden="true">${esc((name || '?').trim()[0] || '?').toUpperCase()}</div>
+        <div class="pinfo">
+          <b>${esc(name)}</b>
+          <small>${esc(cloud.user ? shownName(cloud.user.email) : '')}</small>
+          <small id="syncDetail"></small>
         </div>
-        ${isAdmin() ? `<div class="lockrow">
-          <div><b>Modo personal</b>
-            <small>${personalMode() ? 'Activado: solo ves tus finanzas. La pestaña Admin está oculta.' : 'Oculta la pestaña Admin para ver solo tus finanzas.'}</small></div>
-          <button class="btn ${personalMode() ? '' : 'ghost'}" data-action="${personalMode() ? 'personal-off' : 'personal-on'}">${personalMode() ? 'Mostrar Admin' : 'Activar'}</button>
-        </div>` : ''}
-        <div class="row-end"><button class="btn ghost danger" data-action="logout">Cerrar sesión</button></div>
+        ${window.PREVIEW ? '' : `<button type="button" class="slink" data-action="edit-name">${ui.editName ? 'Cancelar' : 'Editar'}</button>`}
       </section>
+      ${ui.editName ? `<form id="myNameForm" class="card sform">
+        <label class="flabel" for="myName">Tu nombre</label>
+        <div class="sinline"><input id="myName" name="name" maxlength="40" value="${esc(myName())}" autocomplete="name" required><button class="btn">Guardar</button></div>
+      </form>` : ''}
 
-      <section class="card"><h3>Color de tu app</h3>
-        <p class="muted" style="margin-bottom:12px">Elige el color que más te guste: cambia los botones y el fondo de tu app. Cada cuenta tiene el suyo, así sabes al tiro qué sesión está abierta. Funciona en modo claro y oscuro.</p>
-        <div class="swatches">
-          ${ACCENTS.map(a => `<button type="button" class="swatchbox ${sessionAccent() === a.key ? 'on' : ''}" data-action="accent" data-v="${a.key}" aria-pressed="${sessionAccent() === a.key}"><span class="swatch" style="--sw:${a.color}"></span>${a.name}</button>`).join('')}
+      <h4 class="sgroup">Apariencia</h4>
+      <section class="card slist">
+        <div class="srow col"><span>Color</span>
+          <div class="cdots">${ACCENTS.map(a => `<button type="button" class="cdot ${sessionAccent() === a.key ? 'on' : ''}" style="--sw:${a.color}" data-action="accent" data-v="${a.key}" aria-label="${a.name}" title="${a.name}" aria-pressed="${sessionAccent() === a.key}"></button>`).join('')}</div>
         </div>
+        <label class="srow" for="currencySel"><span>Moneda</span>
+          <select id="currencySel" class="sselect">${CURRENCIES.map(c => `<option value="${c}" ${c === data.settings.currency ? 'selected' : ''}>${c} · ${CURRENCY_NAMES[c]}</option>`).join('')}</select>
+        </label>
       </section>
 
-      <section class="card"><h3>Moneda</h3>
-        <p class="muted" style="margin-bottom:10px">Estás usando <b>${esc(data.settings.currency)} – ${esc(CURRENCY_NAMES[data.settings.currency] || data.settings.currency)}</b>. Cambiarla solo cambia cómo se muestran los montos; no convierte los valores.</p>
-        <label class="form" style="display:block"><select id="currencySel" data-action-change="currency">
-          ${CURRENCIES.map(c => `<option value="${c}" ${c === data.settings.currency ? 'selected' : ''}>${c} – ${CURRENCY_NAMES[c]}</option>`).join('')}
-        </select></label>
+      <h4 class="sgroup">Mi dinero</h4>
+      <section class="card slist">
+        ${moneyRow('efectivo', '💵', 'Efectivo')}
+        ${moneyRow('banco', '🏦', 'Banco')}
       </section>
+      <p class="snote">Elige qué cuentas aparecen en Inicio. Las que apagues quedan ocultas, no se borran.</p>
 
-      <section class="card"><h3>Mi dinero</h3>
-        <p class="muted" style="margin-bottom:4px">Elige qué cuentas aparecen en «Mi dinero». Debe quedar al menos una.</p>
-        ${[['efectivo', '💵', 'Efectivo', 'Dinero en la billetera'], ['banco', '🏦', 'Banco', 'Cuenta bancaria y transferencias']].map(([k, ico, name, sub]) => {
-          const on = accountMode() === 'ambos' || accountMode() === k;
-          return `<div class="lockrow switchrow">
-            <div><b>${ico} ${name}</b><small>${sub}</small></div>
-            <button type="button" class="switch ${on ? 'on' : ''}" role="switch" aria-checked="${on}" aria-label="Mostrar ${name}" data-action="acc-toggle" data-k="${k}"><i></i></button>
-          </div>`;
-        }).join('')}
-        ${accountMode() !== 'ambos' && allAccounts().length > accounts().length
-          ? '<p class="muted">La cuenta apagada queda oculta, no se borra. Si la vuelves a encender, aparece con su saldo.</p>' : ''}
-      </section>
-
-      ${window.PREVIEW ? '' : `<section class="card"><h3>Cambiar contraseña</h3>
-        <form id="passForm" class="form">
-          <input type="text" name="username" autocomplete="username" value="${esc(cloud.user ? (isUsernameAccount(cloud.user.email) ? shownName(cloud.user.email).replace('@finanzas', '') : cloud.user.email) : '')}" hidden>
+      ${window.PREVIEW ? '' : `<h4 class="sgroup">Seguridad</h4>
+      <section class="card slist">
+        <div class="srow"><span>Entrar con Face ID / huella</span>${sw(!!lockInfo(), 'lock-toggle', 'Entrar con Face ID o huella')}</div>
+        ${isAdmin() ? `<div class="srow"><span>Modo personal<small>Oculta la pestaña Admin</small></span>${sw(personalMode(), personalMode() ? 'personal-off' : 'personal-on', 'Modo personal')}</div>` : ''}
+        <button type="button" class="srow chev" data-action="toggle-pass" aria-expanded="${!!ui.passOpen}"><span>Cambiar contraseña</span></button>
+        ${ui.passOpen ? `<form id="passForm" class="form spass">
+          <input type="text" name="username" autocomplete="username" value="${esc(login)}" hidden>
           <label>Contraseña actual<input name="current" type="password" autocomplete="current-password" required></label>
           <label>Nueva contraseña<input name="newpass" type="password" autocomplete="new-password" minlength="6" required></label>
           <label>Repite la nueva contraseña<input name="newpass2" type="password" autocomplete="new-password" minlength="6" required></label>
           <p id="passError" class="autherr" hidden></p>
-          <div class="row-end"><button class="btn">Cambiar contraseña</button></div>
-        </form>
+          <div class="row-end"><button class="btn">Guardar contraseña</button></div>
+        </form>` : ''}
       </section>`}
 
-      <section class="card"><h3>Tus datos</h3>
-        <div class="btngrid">
-          <button class="btn ghost" data-action="export-json">Exportar respaldo (JSON)</button>
-          <button class="btn ghost" data-action="export-csv">Exportar movimientos (CSV)</button>
-          <button class="btn ghost" data-action="import-json">Importar respaldo</button>
-        </div>
-        <input type="file" id="importFile" accept="application/json,.json" hidden>
-        <p class="muted">${live(data.transactions).length} movimientos · ${live(data.goals).length} metas guardadas.</p>
-      </section>`;
+      <h4 class="sgroup">Tus datos</h4>
+      <section class="card slist">
+        <button type="button" class="srow chev" data-action="export-json"><span>Exportar respaldo</span></button>
+        <button type="button" class="srow chev" data-action="export-csv"><span>Exportar movimientos (Excel/CSV)</span></button>
+        <button type="button" class="srow chev" data-action="import-json"><span>Importar respaldo</span></button>
+      </section>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+      <p class="snote">${live(data.transactions).length} movimientos · ${live(data.goals).length} metas guardadas</p>
+
+      ${window.PREVIEW ? '' : `<section class="card slist slogout">
+        <button type="button" class="srow danger" data-action="logout">Cerrar sesión</button>
+      </section>`}
+    </div>`;
   },
 };
 
@@ -1550,6 +1548,8 @@ document.addEventListener('click', e => {
     case 'next-month': ui.month = shiftMonth(ui.month, 1); render(); break;
     case 'filter': ui.filter = el.dataset.v; render(); break;
     case 'new-tx': openTx(); break;
+    case 'edit-name': ui.editName = !ui.editName; render(); if (ui.editName) setTimeout(() => { const i = $('#myName'); if (i) { i.focus(); i.select(); } }, 30); break;
+    case 'toggle-pass': ui.passOpen = !ui.passOpen; render(); break;
     case 'accent':
       data.settings = Object.assign({}, data.settings, { accentColor: el.dataset.v, updatedAt: now() });
       commit(); toast('Color: ' + (ACCENTS.find(a => a.key === el.dataset.v) || {}).name);
@@ -1864,8 +1864,7 @@ document.addEventListener('submit', e => {
   }
   if (e.target.id === 'myNameForm') {
     e.preventDefault();
-    saveName(cloud.user.uid, e.target.name.value);
-    e.target.name.blur();
+    saveName(cloud.user.uid, e.target.name.value).then(ok => { if (ok) { ui.editName = false; render(); } });
     return;
   }
   if (e.target.id === 'nameForm') {
@@ -1904,7 +1903,7 @@ document.addEventListener('submit', e => {
     const cred = firebase.auth.EmailAuthProvider.credential(u.email, cur);
     u.reauthenticateWithCredential(cred)
       .then(() => u.updatePassword(nw))
-      .then(() => { f.reset(); toast('Contraseña cambiada'); })
+      .then(() => { f.reset(); ui.passOpen = false; render(); toast('Contraseña cambiada'); })
       .catch(err => fail(err && (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') ? 'La contraseña actual no es correcta.' : authErr(err)));
     return;
   }
