@@ -234,9 +234,8 @@ const userDoc = () => cloud.db.collection('users').doc(cloud.user.uid);
 
 function cloudErr(err) {
   const c = (err && err.code) || '';
-  if (c.includes('permission-denied')) return 'Sin permiso en la base de datos. Revisa las reglas de Firestore.';
-  if (c.includes('unavailable')) return 'Sin conexión: tus cambios se guardan y se subirán después.';
-  return 'Error al sincronizar' + (err && err.message ? ': ' + err.message : '');
+  if (c.includes('unavailable') || !navigator.onLine) return 'Sin conexión: tus cambios se guardan y se subirán solos cuando vuelva internet.';
+  return 'No se pudo sincronizar todavía. Se reintentará automáticamente.';
 }
 function setCloud(state, error = '') { cloud.state = state; cloud.error = error; renderSyncStatus(); }
 
@@ -289,8 +288,17 @@ function onLogin(u) {
   unlocked = !lockInfo();
   setStatusScreen('loading');
   // El perfil dice si la cuenta está aprobada, pendiente o bloqueada
-  cloud.profileUnsub = profileRef(u.uid).onSnapshot({ includeMetadataChanges: true },
-    doc => onProfile(doc), err => { setStatusScreen('error', cloudErr(err)); });
+  watchProfile();
+}
+function watchProfile() {
+  if (!cloud.user) return;
+  const uid = cloud.user.uid;
+  cloud.profileUnsub = profileRef(uid).onSnapshot({ includeMetadataChanges: true },
+    doc => onProfile(doc),
+    () => { // reintentar en silencio
+      cloud.profileUnsub = null;
+      setTimeout(() => { if (cloud.user && cloud.user.uid === uid && !cloud.profileUnsub) watchProfile(); }, 3000);
+    });
 }
 
 function onProfile(doc) {
@@ -298,9 +306,10 @@ function onProfile(doc) {
     if (doc.metadata.fromCache) return; // esperar respuesta del servidor
     const t = now();
     profileRef(cloud.user.uid).set({ email: cloud.user.email, createdAt: t, lastSeen: t, status: 'activo' })
-      .catch(err => setStatusScreen('error', cloudErr(err)));
+      .catch(() => setTimeout(() => { if (cloud.user && cloud.profileUnsub) { cloud.profileUnsub(); cloud.profileUnsub = null; watchProfile(); } }, 3000));
     return;
   }
+  if (doc.metadata.hasPendingWrites) return; // esperar a que Firebase confirme el perfil
   const p = doc.data();
   if (!cloud.seenSet && !doc.metadata.fromCache) {
     cloud.seenSet = true;
@@ -327,10 +336,22 @@ function startData() {
   const base = userDoc();
   for (const list of LISTS) {
     cloud.unsubs.push(base.collection(list).onSnapshot({ includeMetadataChanges: true },
-      snap => onListSnap(list, snap), err => setCloud('error', cloudErr(err))));
+      snap => onListSnap(list, snap), dataError));
   }
   cloud.unsubs.push(base.collection('meta').doc('settings').onSnapshot({ includeMetadataChanges: true },
-    doc => onSettingsSnap(doc), err => setCloud('error', cloudErr(err))));
+    doc => onSettingsSnap(doc), dataError));
+}
+// Si la conexión falla, se vuelve a conectar sola (2 s, 4 s, 8 s… hasta 30 s)
+function dataError(err) {
+  if (cloud.retryTimer) return;
+  setCloud(!navigator.onLine || String(err && err.code).includes('unavailable') ? 'offline' : 'connecting');
+  stopData();
+  const wait = Math.min(30000, 2000 * 2 ** Math.min(cloud.retries || 0, 4));
+  cloud.retries = (cloud.retries || 0) + 1;
+  cloud.retryTimer = setTimeout(() => {
+    cloud.retryTimer = null;
+    if (cloud.user && cloud.status === 'activo') startData();
+  }, wait);
 }
 function stopData() {
   cloud.unsubs.forEach(f => { try { f(); } catch { } });
@@ -340,6 +361,8 @@ function stopData() {
 function onLogout() {
   stopData();
   if (cloud.profileUnsub) { try { cloud.profileUnsub(); } catch { } cloud.profileUnsub = null; }
+  if (cloud.adminUnsub) { try { cloud.adminUnsub(); } catch { } cloud.adminUnsub = null; }
+  clearTimeout(cloud.retryTimer); cloud.retryTimer = null; cloud.retries = 0;
   cloud.user = null; cloud.status = null; cloud.users = []; ui.viewing = null;
   if (ui.tab === 'admin') ui.tab = 'inicio';
   data = normalize(null);
@@ -348,13 +371,14 @@ function onLogout() {
 
 /* ---------- administración ---------- */
 function startAdmin() {
-  cloud.unsubs.push(cloud.db.collection('profiles').onSnapshot(snap => {
+  if (cloud.adminUnsub) return;
+  cloud.adminUnsub = cloud.db.collection('profiles').onSnapshot(snap => {
     cloud.users = snap.docs.map(d => Object.assign({ uid: d.id }, d.data()));
     const pend = cloud.users.filter(u => u.status === 'pendiente').length;
     $('#adminBadge').textContent = pend || '';
     $('#adminBadge').hidden = !pend;
     if (ui.tab === 'admin' && !userIsTyping()) render();
-  }, err => toast(cloudErr(err))));
+  }, () => { cloud.adminUnsub = null; setTimeout(() => { if (isAdmin() && cloud.status === 'activo') startAdmin(); }, 4000); });
 }
 async function createPerson(raw, pass) {
   const email = toLoginEmail(raw);
@@ -430,7 +454,8 @@ function applyRemote(list, item) {
 function afterRemote(changed) {
   if (changed) { save(); if (!userIsTyping()) render(); }
   if (cloud.server.size === LISTS.length + 1) {
-    if (cloud.state === 'connecting' || cloud.state === 'error') setCloud(navigator.onLine ? 'ok' : 'offline');
+    cloud.retries = 0;
+    if (cloud.state === 'connecting' || cloud.state === 'error' || cloud.state === 'offline') setCloud(navigator.onLine ? 'ok' : 'offline');
     cloudPush();
   }
 }
@@ -477,13 +502,23 @@ function doPush() {
   }
   if (!writes.length) return;
   for (let i = 0; i < writes.length; i += 400) {
+    const part = writes.slice(i, i + 400);
     const batch = cloud.db.batch();
-    writes.slice(i, i + 400).forEach(([ref, val]) => batch.set(ref, val));
+    part.forEach(([ref, val]) => batch.set(ref, val));
     cloud.writing++;
     setCloud(navigator.onLine ? 'saving' : 'offline');
     batch.commit()
       .then(() => { cloud.writing--; if (!cloud.writing) setCloud('ok'); })
-      .catch(err => { cloud.writing--; setCloud('error', cloudErr(err)); });
+      .catch(err => {
+        cloud.writing--;
+        // olvidar que se subieron, para reintentar en unos segundos
+        part.forEach(([ref, val]) => {
+          if (ref.id === 'settings' && ref.parent && ref.parent.id === 'meta') delete cloud.known.settings;
+          else if (ref.parent) delete cloud.known[ref.parent.id + '/' + val.id];
+        });
+        setCloud(navigator.onLine ? 'connecting' : 'offline', navigator.onLine ? '' : cloudErr(err));
+        setTimeout(cloudPush, 5000);
+      });
   }
 }
 
