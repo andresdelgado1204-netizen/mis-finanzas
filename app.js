@@ -20,6 +20,8 @@ const DEFAULT_ACCOUNTS = [
   { id: 'banco', name: 'Banco', kind: 'banco', initial: 0, updatedAt: 0 },
 ];
 const CURRENCIES = ['CLP', 'USD', 'EUR', 'ARS', 'PEN', 'COP', 'MXN', 'BRL', 'UYU'];
+const CURRENCY_NAMES = { CLP: 'Peso chileno', USD: 'Dólar estadounidense', EUR: 'Euro', ARS: 'Peso argentino', PEN: 'Sol peruano',
+  COP: 'Peso colombiano', MXN: 'Peso mexicano', BRL: 'Real brasileño', UYU: 'Peso uruguayo' };
 
 /* ---------- utilidades ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -1065,7 +1067,7 @@ const views = {
     const reserved = reservedAmounts().total;
     return `
       <section class="card money">
-        <div class="moneyhead"><h3>Mi dinero</h3><b class="${total < 0 ? 'neg' : ''}">${fmt(total)}</b></div>
+        <div class="moneyhead"><h3>Mi dinero <span class="curchip" title="${esc(CURRENCY_NAMES[data.settings.currency] || '')}">${esc(data.settings.currency)}</span></h3><b class="${total < 0 ? 'neg' : ''}">${fmt(total)}</b></div>
         ${reserved > 0 ? `<p class="muted">Reservado: ${fmt(reserved)} · Disponible: <b>${fmt(total - reserved)}</b></p>` : ''}
         <ul class="acclist">${accs.map(a => `<li data-action="edit-acc" data-id="${a.id}">
           <span class="accicon">${accIcon(a)}</span><span class="accname">${esc(a.name)}</span>
@@ -1171,6 +1173,13 @@ const views = {
           <button class="btn ${personalMode() ? '' : 'ghost'}" data-action="${personalMode() ? 'personal-off' : 'personal-on'}">${personalMode() ? 'Mostrar Admin' : 'Activar'}</button>
         </div>` : ''}
         <div class="row-end"><button class="btn ghost danger" data-action="logout">Cerrar sesión</button></div>
+      </section>
+
+      <section class="card"><h3>Moneda</h3>
+        <p class="muted" style="margin-bottom:10px">Estás usando <b>${esc(data.settings.currency)} – ${esc(CURRENCY_NAMES[data.settings.currency] || data.settings.currency)}</b>. Cambiarla solo cambia cómo se muestran los montos; no convierte los valores.</p>
+        <label class="form" style="display:block"><select id="currencySel" data-action-change="currency">
+          ${CURRENCIES.map(c => `<option value="${c}" ${c === data.settings.currency ? 'selected' : ''}>${c} – ${CURRENCY_NAMES[c]}</option>`).join('')}
+        </select></label>
       </section>
 
       <section class="card"><h3>Mi dinero</h3>
@@ -1697,6 +1706,10 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.id === 'currencySel') {
+    data.settings = Object.assign({}, data.settings, { currency: el.value, updatedAt: now() });
+    commit(); toast(`Moneda: ${el.value} – ${CURRENCY_NAMES[el.value]}`);
+  }
   if (el.name === 'cat' && el.form && el.form.id === 'budgetForm') {
     $('#budgetNewWrap').hidden = el.value !== '__new';
     el.form.repeat.checked = defaultBudgetRepeat(el.value === '__new' ? el.form.newcat.value : el.value);

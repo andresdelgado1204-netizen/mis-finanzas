@@ -590,3 +590,5 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .switch.on i { transform: translateX(20px); }
 .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .switch, .switch i { transition: none; } }
+
+.curchip { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 99px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; vertical-align: middle; background: var(--accent-soft); color: var(--accent); }
