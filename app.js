@@ -1,12 +1,12 @@
 'use strict';
 /* =========================================================
-   Mis Finanzas — app local-first con sincronización a un
-   repositorio privado de GitHub (API de contenidos).
+   Mis Finanzas — cuenta con correo y contraseña, datos en la
+   nube (Firebase) sincronizados en vivo entre dispositivos,
+   y bloqueo opcional con Face ID / huella.
    ========================================================= */
 
-const LS_DATA = 'finanzas.data.v1';
-const LS_CFG = 'finanzas.github.v1';
-const API = 'https://api.github.com';
+const LS_DATA = 'finanzas.data.v2';
+const LS_LOCK = 'finanzas.bloqueo';
 
 const DEFAULT_CATS = {
   gasto: ['Supermercado', 'Comida fuera', 'Transporte', 'Vivienda', 'Cuentas', 'Salud', 'Ocio', 'Ropa',
@@ -68,8 +68,7 @@ function normalize(d) {
   return d;
 }
 
-let data = normalize(readJSON(LS_DATA) || window.PREVIEW_DATA);
-let cfg = Object.assign({ owner: '', repo: '', path: 'finanzas.json', token: '', lastSync: 0 }, readJSON(LS_CFG) || {});
+let data = normalize(window.PREVIEW_DATA || null);
 const startMonth = () => data.settings.startMonth || '';
 const ui = { tab: 'inicio', month: thisMonth(), filter: 'todos' };
 if (startMonth() > ui.month) ui.month = startMonth();
@@ -187,8 +186,9 @@ function catColor(cat) {
 }
 
 /* ---------- cambios ---------- */
-function save() { writeJSON(LS_DATA, data); }
-function commit() { version++; save(); render(); scheduleSync(); }
+const userKey = () => LS_DATA + '.' + (cloud.user ? cloud.user.uid : 'local');
+function save() { if (cloud.user || window.PREVIEW) writeJSON(userKey(), data); }
+function commit() { version++; save(); render(); cloudPush(); }
 function upsert(list, item) {
   item.updatedAt = now();
   const i = data[list].findIndex(x => x.id === item.id);
@@ -221,122 +221,236 @@ function mergeData(l, r) {
 }
 const canon = d => JSON.stringify(mergeData(emptyData(), d));
 
-/* ---------- GitHub ---------- */
-const ghReady = () => !!(cfg.token && cfg.owner && cfg.repo && cfg.path);
-function ghUrl() {
-  return `${API}/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/contents/${cfg.path.split('/').map(encodeURIComponent).join('/')}`;
+/* ---------- nube (Firebase: cuenta + datos en vivo) ---------- */
+const LISTS = ['transactions', 'budgets', 'goals', 'accounts'];
+const cloud = {
+  user: null, auth: null, db: null, unsubs: [],
+  known: {},            // última versión (updatedAt) que existe en la nube de cada elemento
+  server: new Set(),    // listas ya confirmadas por el servidor (antes de eso no subimos nada)
+  writing: 0, timer: null, state: 'idle', error: '',
+};
+const docId = id => encodeURIComponent(String(id)).replace(/\./g, '%2E');
+const userDoc = () => cloud.db.collection('users').doc(cloud.user.uid);
+
+function cloudErr(err) {
+  const c = (err && err.code) || '';
+  if (c.includes('permission-denied')) return 'Sin permiso en la base de datos. Revisa las reglas de Firestore.';
+  if (c.includes('unavailable')) return 'Sin conexión: tus cambios se guardan y se subirán después.';
+  return 'Error al sincronizar' + (err && err.message ? ': ' + err.message : '');
 }
-function ghHeaders(extra) {
-  return Object.assign({ Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, extra || {});
-}
-function b64encode(str) {
-  const bytes = new TextEncoder().encode(str);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
-}
-function b64decode(b64) {
-  const bin = atob(b64.replace(/\s/g, ''));
-  return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
-}
-async function ghError(r) {
-  let msg = '';
-  try { msg = (await r.json()).message || ''; } catch { }
-  if (r.status === 401) return 'Token inválido o vencido. Crea uno nuevo en GitHub.';
-  if (r.status === 403) return 'El token no tiene permiso de escritura (Contents: Read and write).';
-  if (r.status === 404) return 'No se encontró el repositorio, o el token no tiene acceso a él.';
-  return `GitHub respondió ${r.status}${msg ? ': ' + msg : ''}`;
-}
-function deviceName() {
-  const ua = navigator.userAgent;
-  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'iPad';
-  if (/iPhone/.test(ua)) return 'iPhone';
-  if (/Android/.test(ua)) return 'Android';
-  if (/Macintosh/.test(ua)) return 'Mac';
-  return 'navegador';
-}
-async function pull() {
-  const r = await fetch(ghUrl(), { headers: ghHeaders(), cache: 'no-store' });
-  if (r.status === 404) {
-    // ¿No existe el archivo, o no existe el repo? Lo distinguimos.
-    const rr = await fetch(`${API}/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`, { headers: ghHeaders(), cache: 'no-store' });
-    if (!rr.ok) throw new Error(await ghError(rr));
-    return null; // repo ok, archivo aún no creado
-  }
-  if (!r.ok) throw new Error(await ghError(r));
-  const j = await r.json();
-  let text = j.content ? b64decode(j.content) : '';
-  if (!text && j.size > 0) { // archivos > 1 MB vienen sin contenido
-    const r2 = await fetch(ghUrl(), { headers: ghHeaders({ Accept: 'application/vnd.github.raw+json' }), cache: 'no-store' });
-    if (!r2.ok) throw new Error(await ghError(r2));
-    text = await r2.text();
-  }
-  let parsed;
-  try { parsed = text ? JSON.parse(text) : emptyData(); } catch { throw new Error(`El archivo ${cfg.path} no es un JSON válido.`); }
-  return { sha: j.sha, data: normalize(parsed) };
-}
-function push(d, sha) {
-  const body = { message: `Actualizar finanzas desde ${deviceName()}`, content: b64encode(JSON.stringify(d, null, 1)) };
-  if (sha) body.sha = sha;
-  return fetch(ghUrl(), { method: 'PUT', headers: ghHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) });
+function setCloud(state, error = '') { cloud.state = state; cloud.error = error; renderSyncStatus(); }
+
+function cloudInit() {
+  if (window.PREVIEW) { showScreen('app'); render(); return; }
+  const cfgOk = window.FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId;
+  if (!window.firebase || !cfgOk) { showScreen('setup'); return; }
+  firebase.initializeApp(FIREBASE_CONFIG);
+  cloud.auth = firebase.auth();
+  cloud.db = firebase.firestore();
+  try { cloud.db.enablePersistence({ synchronizeTabs: true }).catch(() => { }); } catch { }
+  cloud.auth.onAuthStateChanged(u => (u ? onLogin(u) : onLogout()));
 }
 
-let syncing = false, syncAgain = false, syncTimer = null, lastAuto = 0;
-const syncState = { kind: '', msg: '' };
-function scheduleSync() { if (!ghReady()) return; clearTimeout(syncTimer); syncTimer = setTimeout(() => sync(), 2500); }
-function setSync(kind, msg) { syncState.kind = kind; syncState.msg = msg; renderSyncStatus(); }
+function onLogin(u) {
+  if (cloud.user && cloud.user.uid === u.uid) return;
+  cloud.user = u;
+  cloud.known = {}; cloud.server = new Set();
+  data = normalize(readJSON(userKey()));
+  if (startMonth() > ui.month) ui.month = startMonth();
+  unlocked = !lockInfo();
+  showScreen(unlocked ? 'app' : 'lock');
+  render();
+  setCloud('connecting');
+  const base = userDoc();
+  for (const list of LISTS) {
+    cloud.unsubs.push(base.collection(list).onSnapshot({ includeMetadataChanges: true },
+      snap => onListSnap(list, snap), err => setCloud('error', cloudErr(err))));
+  }
+  cloud.unsubs.push(base.collection('meta').doc('settings').onSnapshot({ includeMetadataChanges: true },
+    doc => onSettingsSnap(doc), err => setCloud('error', cloudErr(err))));
+}
+
+function onLogout() {
+  cloud.unsubs.forEach(f => { try { f(); } catch { } });
+  cloud.unsubs = []; cloud.user = null; cloud.known = {}; cloud.server = new Set();
+  data = normalize(null);
+  showScreen('auth');
+}
+
+function applyRemote(list, item) {
+  cloud.known[list + '/' + item.id] = item.updatedAt || 0;
+  const i = data[list].findIndex(x => x.id === item.id);
+  if (i < 0) { data[list].push(item); return true; }
+  if ((item.updatedAt || 0) > (data[list][i].updatedAt || 0)) { data[list][i] = item; return true; }
+  return false;
+}
+function afterRemote(changed) {
+  if (changed) { save(); if (!userIsTyping()) render(); }
+  if (cloud.server.size === LISTS.length + 1) {
+    if (cloud.state === 'connecting' || cloud.state === 'error') setCloud(navigator.onLine ? 'ok' : 'offline');
+    cloudPush();
+  }
+}
+function onListSnap(list, snap) {
+  let changed = false;
+  for (const ch of snap.docChanges()) if (ch.type !== 'removed') changed = applyRemote(list, ch.doc.data()) || changed;
+  if (!snap.metadata.fromCache) cloud.server.add(list);
+  afterRemote(changed);
+}
+function onSettingsSnap(doc) {
+  let changed = false;
+  if (doc.exists) {
+    const st = doc.data();
+    cloud.known.settings = st.updatedAt || 0;
+    if ((st.updatedAt || 0) > (data.settings.updatedAt || 0)) {
+      data.settings = normalize({ settings: st }).settings; changed = true;
+    }
+  }
+  if (!doc.metadata.fromCache) cloud.server.add('settings');
+  afterRemote(changed);
+}
+
+function cloudPush() {
+  if (!cloud.user || !cloud.db) return;
+  clearTimeout(cloud.timer);
+  cloud.timer = setTimeout(doPush, 300);
+}
+function doPush() {
+  if (!cloud.user || cloud.server.size < LISTS.length + 1) return; // esperar a conocer lo que hay en la nube
+  const base = userDoc();
+  const writes = [];
+  for (const list of LISTS) {
+    for (const item of data[list]) {
+      const k = list + '/' + item.id;
+      if (!(k in cloud.known) || (item.updatedAt || 0) > cloud.known[k]) {
+        writes.push([base.collection(list).doc(docId(item.id)), clone(item)]);
+        cloud.known[k] = item.updatedAt || 0;
+      }
+    }
+  }
+  if (!('settings' in cloud.known) || (data.settings.updatedAt || 0) > cloud.known.settings) {
+    writes.push([base.collection('meta').doc('settings'), clone(data.settings)]);
+    cloud.known.settings = data.settings.updatedAt || 0;
+  }
+  if (!writes.length) return;
+  for (let i = 0; i < writes.length; i += 400) {
+    const batch = cloud.db.batch();
+    writes.slice(i, i + 400).forEach(([ref, val]) => batch.set(ref, val));
+    cloud.writing++;
+    setCloud(navigator.onLine ? 'saving' : 'offline');
+    batch.commit()
+      .then(() => { cloud.writing--; if (!cloud.writing) setCloud('ok'); })
+      .catch(err => { cloud.writing--; setCloud('error', cloudErr(err)); });
+  }
+}
+
 function userIsTyping() {
   const a = document.activeElement;
   return !!document.querySelector('dialog[open]') || (a && a.matches('input, textarea, select'));
 }
-async function sync(manual) {
-  if (window.PREVIEW) { if (manual) toast('En la vista previa no se sincroniza; funciona en tu app publicada.'); return; }
-  if (!ghReady()) { if (manual) { toast('Configura GitHub en Ajustes'); ui.tab = 'ajustes'; render(); } return; }
-  if (!navigator.onLine) { setSync('err', 'Sin conexión'); return; }
-  if (syncing) { syncAgain = true; return; }
-  syncing = true; lastAuto = now();
-  setSync('busy', 'Sincronizando…');
-  const startVersion = version;
-  try {
-    for (let attempt = 0; ; attempt++) {
-      const remote = await pull();
-      const before = canon(data);
-      const merged = remote ? mergeData(data, remote.data) : mergeData(emptyData(), data);
-      const localChanged = canon(merged) !== before;
-      data = merged; save();
-      if (localChanged && !userIsTyping()) render();
-      if (remote && canon(remote.data) === canon(merged)) break; // nada que subir
-      const r = await push(merged, remote?.sha);
-      if (r.ok) break;
-      if ((r.status === 409 || r.status === 422) && attempt < 3) continue; // otro dispositivo escribió justo antes
-      throw new Error(await ghError(r));
-    }
-    cfg.lastSync = now(); writeJSON(LS_CFG, cfg);
-    setSync('ok', 'Sincronizado');
-    if (manual) toast('Datos sincronizados');
-  } catch (e) {
-    setSync('err', e.message || 'Error al sincronizar');
-    if (manual) toast(e.message || 'Error al sincronizar');
-  } finally {
-    syncing = false;
-    if (syncAgain || version !== startVersion) { syncAgain = false; scheduleSync(); }
-  }
-}
 function renderSyncStatus() {
   const b = $('#syncBtn');
   if (!b) return;
-  let kind = syncState.kind, msg = syncState.msg;
+  const map = {
+    idle: ['', 'Sin conectar'], connecting: ['busy', 'Conectando…'], saving: ['busy', 'Guardando…'],
+    ok: ['ok', 'Sincronizado'], offline: ['err', 'Sin conexión'], error: ['err', 'Error'],
+  };
+  let [kind, msg] = map[cloud.state] || map.idle;
   if (window.PREVIEW) { kind = ''; msg = 'Vista previa'; }
-  else if (!ghReady()) { kind = ''; msg = 'Solo en este dispositivo'; }
-  else if (!msg) msg = cfg.lastSync ? 'Toca para sincronizar' : 'Sin sincronizar';
   b.className = 'sync ' + kind;
   b.querySelector('span').textContent = msg;
-  b.title = kind === 'err' ? msg : (cfg.lastSync ? 'Última sincronización: ' + new Date(cfg.lastSync).toLocaleString('es-CL') : 'Sincronizar ahora');
+  b.title = cloud.error || msg;
   const det = $('#syncDetail');
-  if (det) det.textContent = ghReady()
-    ? (kind === 'err' ? '⚠️ ' + msg : cfg.lastSync ? 'Última sincronización: ' + new Date(cfg.lastSync).toLocaleString('es-CL') : '')
-    : '';
+  if (det) det.textContent = cloud.error ? '⚠️ ' + cloud.error
+    : cloud.state === 'offline' ? 'Sin conexión: lo que anotes se guarda aquí y se sube solo cuando vuelva internet.'
+    : 'Tus datos se guardan en la nube y se ven al instante en todos tus dispositivos.';
 }
+window.addEventListener('online', () => { if (cloud.user) { setCloud(cloud.writing ? 'saving' : 'ok'); cloudPush(); } });
+window.addEventListener('offline', () => { if (cloud.user) setCloud('offline'); });
+
+/* ---------- pantallas: ingreso, bloqueo, configuración ---------- */
+function showScreen(name) {
+  for (const n of ['auth', 'lock', 'setup']) { const el = $('#' + n + 'Screen'); if (el) el.hidden = n !== name; }
+  document.body.classList.toggle('gated', name !== 'app');
+  if (name === 'lock') $('#lockEmail').textContent = cloud.user ? cloud.user.email : '';
+  if (name === 'auth') setAuthMode(authMode);
+}
+let authMode = 'login'; // login | signup | reauth
+function setAuthMode(m) {
+  authMode = m;
+  const f = $('#authForm');
+  const signup = m === 'signup';
+  $('#authTitle').textContent = signup ? 'Crea tu cuenta' : m === 'reauth' ? 'Confirma tu contraseña' : 'Ingresa a tu cuenta';
+  $('#authSubmit').textContent = signup ? 'Crear cuenta' : 'Ingresar';
+  f.password.autocomplete = signup ? 'new-password' : 'current-password';
+  $('#authToggle').hidden = m === 'reauth';
+  $('#authToggle').textContent = signup ? '¿Ya tienes cuenta? Ingresa' : '¿No tienes cuenta? Crea una';
+  $('#authReset').hidden = signup;
+  $('#authOther').hidden = m !== 'reauth';
+  if (m === 'reauth' && cloud.user) f.email.value = cloud.user.email;
+  $('#authError').hidden = true;
+}
+function authErr(err) {
+  const c = (err && err.code) || '';
+  const msgs = {
+    'auth/invalid-email': 'El correo no es válido.',
+    'auth/user-not-found': 'Correo o contraseña incorrectos.',
+    'auth/wrong-password': 'Correo o contraseña incorrectos.',
+    'auth/invalid-credential': 'Correo o contraseña incorrectos.',
+    'auth/invalid-login-credentials': 'Correo o contraseña incorrectos.',
+    'auth/email-already-in-use': 'Ya existe una cuenta con ese correo. Ingresa con tu contraseña.',
+    'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
+    'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos y vuelve a intentar.',
+    'auth/network-request-failed': 'Sin conexión a internet. Revisa tu conexión e intenta de nuevo.',
+    'auth/operation-not-allowed': 'El ingreso con correo no está activado en Firebase.',
+    'auth/unauthorized-domain': 'Este sitio no está autorizado en Firebase (Authorized domains).',
+  };
+  return msgs[c] || 'No se pudo completar: ' + (err && err.message ? err.message : 'error desconocido');
+}
+function showAuthError(msg) { const e = $('#authError'); e.textContent = msg; e.hidden = false; }
+
+/* ---------- bloqueo con Face ID / Touch ID / huella (WebAuthn) ---------- */
+let unlocked = true, hiddenAt = 0;
+const RELOCK_MS = 2 * 60 * 1000; // vuelve a pedir Face ID si la app estuvo cerrada más de 2 minutos
+const rand = n => crypto.getRandomValues(new Uint8Array(n));
+const toB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const fromB64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+function lockInfo() { const l = readJSON(LS_LOCK); return l && cloud.user && l.uid === cloud.user.uid ? l : null; }
+async function biometricAvailable() {
+  try { return !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); }
+  catch { return false; }
+}
+async function enableLock() {
+  if (!(await biometricAvailable())) { toast('Este dispositivo no tiene Face ID, Touch ID ni huella disponibles para la app.'); return; }
+  try {
+    const cred = await navigator.credentials.create({ publicKey: {
+      rp: { name: 'Mis Finanzas' },
+      user: { id: rand(16), name: cloud.user.email, displayName: cloud.user.email },
+      challenge: rand(32),
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+      timeout: 60000, attestation: 'none',
+    } });
+    writeJSON(LS_LOCK, { uid: cloud.user.uid, credId: toB64u(cred.rawId) });
+    unlocked = true; render(); toast('Bloqueo activado en este dispositivo');
+  } catch (e) { toast('No se activó el bloqueo: se canceló o no se pudo verificar.'); }
+}
+function disableLock() { try { localStorage.removeItem(LS_LOCK); } catch { } render(); toast('Bloqueo desactivado'); }
+async function unlock() {
+  const l = lockInfo();
+  if (!l) { unlocked = true; showScreen('app'); return; }
+  try {
+    await navigator.credentials.get({ publicKey: {
+      challenge: rand(32), timeout: 60000, userVerification: 'required',
+      allowCredentials: [{ type: 'public-key', id: fromB64u(l.credId), transports: ['internal'] }],
+    } });
+    unlocked = true; showScreen('app'); render();
+  } catch { toast('No se pudo verificar. Intenta de nuevo o usa tu contraseña.'); }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { hiddenAt = now(); return; }
+  if (cloud.user && lockInfo() && unlocked && hiddenAt && now() - hiddenAt > RELOCK_MS) { unlocked = false; showScreen('lock'); }
+});
 
 /* ---------- vistas ---------- */
 function progress(v, max, extraCls = '') {
@@ -470,19 +584,15 @@ const views = {
   ajustes() {
     const c = data.settings.categories;
     return `
-      <section class="card"><h3>Sincronización con GitHub</h3>
-        <p class="muted" style="margin-bottom:12px">Tus datos se guardan en un archivo dentro de un repositorio <b>privado</b>. Ingresa los mismos datos en cada dispositivo.</p>
-        <form id="ghform" class="form">
-          <label>Tu usuario de GitHub<input name="owner" value="${esc(cfg.owner)}" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" placeholder="tu-usuario" required></label>
-          <label>Repositorio privado de datos<input name="repo" value="${esc(cfg.repo)}" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" placeholder="finanzas-datos" required></label>
-          <label>Archivo<input name="path" value="${esc(cfg.path)}" autocapitalize="off" autocorrect="off" spellcheck="false" required></label>
-          <label>Token de acceso (fine-grained)<input name="token" type="password" value="${esc(cfg.token)}" autocomplete="off" placeholder="github_pat_…" required></label>
-          <div class="row-end">
-            ${cfg.token ? '<button type="button" class="btn ghost danger" data-action="gh-disconnect">Desconectar</button>' : ''}
-            <button class="btn">Guardar y sincronizar</button>
-          </div>
-        </form>
+      <section class="card"><h3>Tu cuenta</h3>
+        <p class="acctline">${window.PREVIEW ? 'Vista previa (sin cuenta)' : `Ingresaste como <b>${esc(cloud.user ? cloud.user.email : '')}</b>`}</p>
         <p id="syncDetail" class="muted"></p>
+        <div class="lockrow">
+          <div><b>Bloqueo con Face ID / huella</b>
+            <small>${lockInfo() ? 'Activado en este dispositivo. Se pide al abrir la app.' : 'Pide Face ID, Touch ID o tu huella al abrir la app en este dispositivo.'}</small></div>
+          <button class="btn ${lockInfo() ? 'ghost' : ''}" data-action="lock-toggle">${lockInfo() ? 'Desactivar' : 'Activar'}</button>
+        </div>
+        <div class="row-end"><button class="btn ghost danger" data-action="logout">Cerrar sesión</button></div>
       </section>
 
       <section class="card"><h3>Tus datos</h3>
@@ -490,7 +600,6 @@ const views = {
           <button class="btn ghost" data-action="export-json">Exportar respaldo (JSON)</button>
           <button class="btn ghost" data-action="export-csv">Exportar movimientos (CSV)</button>
           <button class="btn ghost" data-action="import-json">Importar respaldo</button>
-          <button class="btn ghost danger" data-action="wipe-local">Borrar datos de este dispositivo</button>
         </div>
         <input type="file" id="importFile" accept="application/json,.json" hidden>
         <p class="muted">${live(data.transactions).length} movimientos · ${live(data.goals).length} metas guardadas.</p>
@@ -676,7 +785,27 @@ document.addEventListener('click', e => {
   if (!el) return;
   const id = el.dataset.id;
   switch (el.dataset.action) {
-    case 'sync': sync(true); break;
+    case 'sync': toast(cloud.error || (cloud.state === 'ok' ? 'Tus datos están al día en todos tus dispositivos' : 'Sincronizando…')); break;
+    case 'auth-toggle': setAuthMode(authMode === 'signup' ? 'login' : 'signup'); break;
+    case 'auth-reset': {
+      const email = $('#authForm').email.value.trim();
+      if (!email) { showAuthError('Escribe tu correo arriba y vuelve a tocar "Olvidé mi contraseña".'); break; }
+      cloud.auth.sendPasswordResetEmail(email)
+        .then(() => toast('Te enviamos un correo para cambiar tu contraseña'))
+        .catch(err => showAuthError(authErr(err)));
+      break;
+    }
+    case 'auth-other': cloud.auth.signOut(); break;
+    case 'unlock': unlock(); break;
+    case 'lock-password': setAuthMode('reauth'); showScreen('auth'); break;
+    case 'lock-toggle': if (lockInfo()) disableLock(); else enableLock(); break;
+    case 'logout':
+      ask('¿Cerrar sesión en este dispositivo? Tus datos quedan guardados en tu cuenta.', 'Cerrar sesión').then(ok => {
+        if (!ok) return;
+        try { localStorage.removeItem(userKey()); localStorage.removeItem(LS_LOCK); } catch { }
+        cloud.auth.signOut();
+      });
+      break;
     case 'prev-month':
       if (startMonth() && shiftMonth(ui.month, -1) < startMonth()) { toast('Tus registros empiezan en ' + monthLabel(startMonth())); break; }
       ui.month = shiftMonth(ui.month, -1); render(); break;
@@ -709,25 +838,9 @@ document.addEventListener('click', e => {
     case 'new-goal': openGoal(); break;
     case 'edit-goal': openGoal(data.goals.find(g => g.id === id)); break;
     case 'contribute': openContrib(data.goals.find(g => g.id === id)); break;
-    case 'gh-disconnect':
-      ask('¿Quitar la conexión con GitHub en este dispositivo? Tus datos locales se mantienen.', 'Desconectar').then(ok => {
-        if (!ok) return;
-        cfg = { owner: '', repo: '', path: 'finanzas.json', token: '', lastSync: 0 };
-        writeJSON(LS_CFG, cfg); setSync('', ''); render();
-      });
-      break;
     case 'export-json': download(`finanzas-respaldo-${today()}.json`, JSON.stringify(data, null, 1), 'application/json'); break;
     case 'export-csv': exportCSV(); break;
     case 'import-json': $('#importFile').click(); break;
-    case 'wipe-local':
-      ask(ghReady()
-        ? '¿Borrar los datos guardados en este dispositivo? Se volverán a descargar desde GitHub.'
-        : '¿Borrar todos tus datos? No tienes GitHub configurado, así que no se podrán recuperar.', 'Borrar').then(ok => {
-        if (!ok) return;
-        data = emptyData(); save(); render();
-        if (ghReady()) sync(true);
-      });
-      break;
   }
 });
 
@@ -857,15 +970,26 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('submit', e => {
-  if (e.target.id === 'ghform') {
+  if (e.target.id === 'authForm') {
     e.preventDefault();
     const f = e.target;
-    cfg.owner = f.owner.value.trim();
-    cfg.repo = f.repo.value.trim();
-    cfg.path = f.path.value.trim().replace(/^\/+/, '') || 'finanzas.json';
-    cfg.token = f.token.value.trim();
-    writeJSON(LS_CFG, cfg);
-    sync(true);
+    const email = f.email.value.trim(), pass = f.password.value;
+    const btn = $('#authSubmit');
+    btn.disabled = true;
+    const done = () => { btn.disabled = false; };
+    if (authMode === 'reauth') {
+      cloud.auth.signInWithEmailAndPassword(email, pass)
+        .then(() => { unlocked = true; f.password.value = ''; showScreen('app'); render(); })
+        .catch(err => showAuthError(authErr(err))).finally(done);
+    } else if (authMode === 'signup') {
+      cloud.auth.createUserWithEmailAndPassword(email, pass)
+        .then(() => { f.password.value = ''; toast('¡Cuenta creada!'); })
+        .catch(err => showAuthError(authErr(err))).finally(done);
+    } else {
+      cloud.auth.signInWithEmailAndPassword(email, pass)
+        .then(() => { f.password.value = ''; })
+        .catch(err => showAuthError(authErr(err))).finally(done);
+    }
   }
   if (e.target.id === 'prefform') {
     e.preventDefault();
@@ -879,14 +1003,9 @@ document.addEventListener('submit', e => {
   }
 });
 
-window.addEventListener('online', () => sync());
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && now() - lastAuto > 30000) sync();
-});
 
 /* ---------- inicio ---------- */
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => { });
 }
-render();
-sync();
+cloudInit();

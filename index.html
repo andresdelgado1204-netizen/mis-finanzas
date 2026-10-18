@@ -140,6 +140,48 @@
     </div>
   </dialog>
 
+  <!-- Ingreso con correo y contraseña -->
+  <div id="authScreen" class="gate" hidden>
+    <div class="gatebox">
+      <img src="icon-192.png" class="gatelogo" alt="" width="72" height="72">
+      <h1>Mis Finanzas</h1>
+      <p class="gatesub" id="authTitle">Ingresa a tu cuenta</p>
+      <form id="authForm" class="form" autocomplete="on">
+        <label>Correo<input id="authEmail" name="email" type="email" inputmode="email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required></label>
+        <label>Contraseña<input id="authPass" name="password" type="password" autocomplete="current-password" minlength="6" required></label>
+        <p id="authError" class="autherr" role="alert" hidden></p>
+        <button class="btn wide" id="authSubmit">Ingresar</button>
+      </form>
+      <button type="button" class="linkbtn" id="authToggle" data-action="auth-toggle">¿No tienes cuenta? Crea una</button>
+      <button type="button" class="linkbtn" id="authReset" data-action="auth-reset">Olvidé mi contraseña</button>
+      <button type="button" class="linkbtn" id="authOther" data-action="auth-other" hidden>Ingresar con otra cuenta</button>
+    </div>
+  </div>
+
+  <!-- Bloqueo con Face ID / huella -->
+  <div id="lockScreen" class="gate" hidden>
+    <div class="gatebox">
+      <img src="icon-192.png" class="gatelogo" alt="" width="72" height="72">
+      <h1>Mis Finanzas</h1>
+      <p class="gatesub" id="lockEmail"></p>
+      <button type="button" class="btn wide big" data-action="unlock">Desbloquear con Face ID / huella</button>
+      <button type="button" class="linkbtn" data-action="lock-password">Usar mi contraseña</button>
+    </div>
+  </div>
+
+  <!-- Falta configurar Firebase -->
+  <div id="setupScreen" class="gate" hidden>
+    <div class="gatebox">
+      <img src="icon-192.png" class="gatelogo" alt="" width="72" height="72">
+      <h1>Mis Finanzas</h1>
+      <p class="gatesub">Falta conectar la app con Firebase. Completa el archivo <b>firebase-config.js</b> o revisa tu conexión a internet y recarga.</p>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
