@@ -1946,3 +1946,35 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => { });
 }
 cloudInit();
+
+/* ---------- ojo para ver u ocultar contraseñas ---------- */
+const EYE_ON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.9 0 3.6-.6 5-1.5"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+function addEyes() {
+  document.querySelectorAll('input[type="password"]:not([data-eye])').forEach(inp => {
+    inp.dataset.eye = '1';
+    const wrap = document.createElement('span'); wrap.className = 'pwrap';
+    inp.parentNode.insertBefore(wrap, inp); wrap.appendChild(inp);
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'eye'; b.setAttribute('aria-label', 'Mostrar contraseña'); b.innerHTML = EYE_ON;
+    wrap.appendChild(b);
+  });
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.eye'); if (!b) return;
+  e.preventDefault();
+  const inp = b.parentNode.querySelector('input');
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  b.innerHTML = show ? EYE_OFF : EYE_ON;
+  b.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+});
+// al enviar, se vuelve a ocultar (así el teléfono puede ofrecer guardar la contraseña)
+document.addEventListener('submit', e => {
+  e.target.querySelectorAll('input[data-eye]').forEach(i => {
+    i.type = 'password';
+    const b = i.parentNode.querySelector('.eye'); if (b) { b.innerHTML = EYE_ON; b.setAttribute('aria-label', 'Mostrar contraseña'); }
+  });
+}, true);
+addEyes();
+new MutationObserver(addEyes).observe(document.body, { childList: true, subtree: true });
