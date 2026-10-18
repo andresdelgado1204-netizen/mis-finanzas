@@ -513,6 +513,8 @@ window.addEventListener('offline', () => { if (cloud.user) setCloud('offline'); 
 
 /* ---------- pantallas: ingreso, bloqueo, configuración ---------- */
 function showScreen(name) {
+  if (name === 'lock') { name = 'auth'; authMode = 'reauth'; }
+  else if (name === 'auth' && authMode === 'reauth' && !(cloud.user && lockInfo())) authMode = 'login';
   for (const n of ['auth', 'lock', 'setup', 'status']) { const el = $('#' + n + 'Screen'); if (el) el.hidden = n !== name; }
   document.body.classList.toggle('gated', name !== 'app');
   if (name === 'lock') $('#lockEmail').textContent = cloud.user ? shownName(cloud.user.email) : '';
@@ -537,7 +539,7 @@ function setAuthMode(m) {
   authMode = m;
   const f = $('#authForm');
   const signup = m === 'signup';
-  $('#authTitle').textContent = signup ? 'Crea tu cuenta' : m === 'reauth' ? 'Confirma tu contraseña' : 'Ingresa a tu cuenta';
+  $('#authTitle').textContent = signup ? 'Crea tu cuenta' : 'Ingresa a tu cuenta';
   $('#authSubmit').textContent = signup ? 'Crear cuenta' : 'Ingresar';
   f.password.autocomplete = signup ? 'new-password' : 'current-password';
   $('#authToggle').hidden = true; // las cuentas las crea el administrador
@@ -1025,8 +1027,14 @@ document.addEventListener('click', e => {
         .catch(err => showAuthError(authErr(err)));
       break;
     }
-    case 'auth-other': cloud.auth.signOut(); break;
+    case 'auth-other':
+      try { localStorage.removeItem(userKey()); localStorage.removeItem(LS_LOCK); } catch { }
+      authMode = 'login'; cloud.auth.signOut(); break;
     case 'unlock': unlock(); break;
+    case 'face-login':
+      if (cloud.user && lockInfo()) unlock();
+      else showAuthError('Para entrar con Face ID o huella, primero entra una vez con tu usuario y contraseña, y actívalo cuando la app te lo pregunte.');
+      break;
     case 'lock-password': setAuthMode('reauth'); showScreen('auth'); break;
     case 'lock-toggle': if (lockInfo()) disableLock(); else enableLock(); break;
     case 'logout-now':

@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <header class="top">
@@ -164,9 +164,10 @@
         <p id="authNotice" class="authnote" hidden></p>
         <p id="authError" class="autherr" role="alert" hidden></p>
         <button class="btn wide" id="authSubmit">Ingresar</button>
+        <button type="button" class="btn wide outline faceid" id="faceBtn" data-action="face-login"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 16a4 4 0 0 0 5 0"/></svg>Entrar con Face ID / huella</button>
       </form>
       <button type="button" class="linkbtn" id="authToggle" data-action="auth-toggle">¿No tienes cuenta? Crea una</button>
-      <button type="button" class="linkbtn" id="authOther" data-action="auth-other" hidden>Ingresar con otra cuenta</button>
+      <button type="button" class="linkbtn" id="authOther" data-action="auth-other" hidden>Usar otra cuenta</button>
     </div>
   </div>
 
@@ -208,7 +209,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=10"></script>
-  <script src="app.js?v=10"></script>
+  <script src="firebase-config.js?v=11"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

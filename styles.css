@@ -324,3 +324,5 @@ body.gated > .top, body.gated > .tabs, body.gated > #monthbar, body.gated > main
 .lockuser { font-weight: 600; margin: 0 0 4px; overflow-wrap: anywhere; }
 .btn.faceid { display: flex; align-items: center; justify-content: center; gap: 10px; }
 .linkbtn.subtle { color: var(--muted); font-size: .85rem; padding-top: 2px; }
+.btn.outline { background: var(--card); color: var(--text); border: 1px solid var(--line); margin-top: 10px; }
+#authSubmit { margin-top: 4px; }
