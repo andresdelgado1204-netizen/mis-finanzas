@@ -219,7 +219,7 @@ function setAccountMode(m) {
   }
   if (m !== 'ambos') { try { localStorage.setItem('finanzas.ultimoMetodo', m === 'efectivo' ? 'efectivo' : 'transferencia'); } catch { } }
   commit();
-  toast(m === 'ambos' ? 'Usas efectivo y banco' : m === 'efectivo' ? 'Ahora usas solo efectivo' : 'Ahora usas solo banco');
+  toast(m === 'ambos' ? 'Mi dinero muestra Efectivo y Banco' : m === 'efectivo' ? 'Mi dinero muestra solo Efectivo' : 'Mi dinero muestra solo Banco');
 }
 const accName = id => (data.accounts.find(a => a.id === id && !a.deleted) || { name: 'Cuenta eliminada' }).name;
 const accIcon = a => (a.kind === 'efectivo' ? '💵' : '🏦');
@@ -1172,14 +1172,17 @@ const views = {
         <div class="row-end"><button class="btn ghost danger" data-action="logout">Cerrar sesión</button></div>
       </section>
 
-      <section class="card"><h3>Tus cuentas</h3>
-        <p class="muted" style="margin-bottom:12px">Elige con qué manejas tu dinero. La app solo mostrará esas cuentas. Puedes elegir solo efectivo, solo banco o ambos.</p>
-        <div class="seg accmode">
-          ${[['efectivo', '💵 Efectivo'], ['banco', '🏦 Banco'], ['ambos', 'Ambos']].map(([v, l]) =>
-            `<button type="button" class="${accountMode() === v ? 'on' : ''}" data-action="acc-mode" data-v="${v}">${l}</button>`).join('')}
-        </div>
+      <section class="card"><h3>Mi dinero</h3>
+        <p class="muted" style="margin-bottom:4px">Elige qué cuentas aparecen en «Mi dinero». Debe quedar al menos una.</p>
+        ${[['efectivo', '💵', 'Efectivo', 'Dinero en la billetera'], ['banco', '🏦', 'Banco', 'Cuenta bancaria y transferencias']].map(([k, ico, name, sub]) => {
+          const on = accountMode() === 'ambos' || accountMode() === k;
+          return `<div class="lockrow switchrow">
+            <div><b>${ico} ${name}</b><small>${sub}</small></div>
+            <button type="button" class="switch ${on ? 'on' : ''}" role="switch" aria-checked="${on}" aria-label="Mostrar ${name}" data-action="acc-toggle" data-k="${k}"><i></i></button>
+          </div>`;
+        }).join('')}
         ${accountMode() !== 'ambos' && allAccounts().length > accounts().length
-          ? '<p class="muted">Tus otras cuentas quedan ocultas, no se borran. Puedes volver a mostrarlas eligiendo «Ambos».</p>' : ''}
+          ? '<p class="muted">La cuenta apagada queda oculta, no se borra. Si la vuelves a encender, aparece con su saldo.</p>' : ''}
       </section>
 
       ${window.PREVIEW ? '' : `<section class="card"><h3>Cambiar contraseña</h3>
@@ -1525,6 +1528,15 @@ document.addEventListener('click', e => {
     }
     case 'new-acc': openAcc(); break;
     case 'acc-mode': if (el.dataset.v !== accountMode()) setAccountMode(el.dataset.v); break;
+    case 'acc-toggle': {
+      const k = el.dataset.k, other = k === 'efectivo' ? 'banco' : 'efectivo', m = accountMode();
+      const on = m === 'ambos' || m === k;
+      if (on) {
+        if (m === k) { toast('Debe quedar al menos una cuenta encendida'); break; }
+        setAccountMode(other);           // apagar esta: queda solo la otra
+      } else setAccountMode('ambos');    // encender esta: quedan ambas
+      break;
+    }
     case 'new-budget': openBudget(); break;
     case 'del-budget': {
       const cat = el.dataset.cat;

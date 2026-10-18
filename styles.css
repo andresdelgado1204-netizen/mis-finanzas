@@ -581,3 +581,12 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 /* Ajustes: tipo de cuentas */
 .seg.accmode { margin-bottom: 4px; }
 .seg.accmode button { font-size: .88rem; padding: 10px 6px; }
+
+/* Interruptores de Mi dinero */
+.switchrow { margin-top: 0; }
+.switch { position: relative; width: 52px; height: 32px; flex: none; border: 0; border-radius: 99px; background: var(--line); padding: 0; transition: background .2s; }
+.switch i { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s; }
+.switch.on { background: var(--accent); }
+.switch.on i { transform: translateX(20px); }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .switch, .switch i { transition: none; } }
