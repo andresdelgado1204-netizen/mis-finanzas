@@ -931,7 +931,6 @@ const views = {
     const budCats = budgetCats().filter(c => budgetFor(c) > 0);
     const budTotal = budCats.reduce((s, c) => s + budgetFor(c), 0);
     const budSpent = budCats.reduce((s, c) => s + (spent[c] || 0), 0);
-    const over = budCats.filter(c => (spent[c] || 0) > budgetFor(c));
     const goals = live(data.goals);
 
     const accBal = balances();
@@ -956,14 +955,34 @@ const views = {
         <div class="card stat"><small>Gastos</small><b class="neg">${fmt(exp)}</b></div>
         <div class="card stat"><small>Disponible del mes</small><b class="${bal >= 0 ? 'pos' : 'neg'}">${fmt(bal)}</b></div>
       </section>
-      ${budTotal ? `<section class="card"><h3>Presupuesto del mes</h3>${progress(budSpent, budTotal)}
-        <p class="muted">${fmt(budSpent)} de ${fmt(budTotal)} · disponible ${fmt(Math.max(0, budTotal - budSpent))}
-        ${over.length ? `<br><span class="neg">Excedido en: ${over.map(esc).join(', ')}</span>` : ''}</p></section>`
-        : `<section class="card"><h3>Presupuesto del mes</h3><p class="muted">Aún no defines límites. <a href="#" data-tab="presupuesto">Configurar presupuesto</a></p></section>`}
+      <section class="card">
+        <div class="summary-head"><h3>Tu presupuesto del mes</h3><a href="#" data-tab="presupuesto">Ver presupuesto →</a></div>
+        ${budCats.length ? `<div class="summary-grid">
+          <div><small>Presupuestado</small><b>${fmt(budTotal)}</b></div>
+          <div><small>Gastado</small><b class="neg">${fmt(budSpent)}</b></div>
+          <div><small>${budSpent > budTotal ? 'Excedido' : 'Te queda'}</small><b class="${budSpent > budTotal ? 'neg' : 'pos'}">${fmt(Math.abs(budTotal - budSpent))}</b></div>
+        </div>${progress(budSpent, budTotal)}` : ''}
+        ${budgetCats().length ? budgetCats().map(c => {
+          const limit = budgetFor(c), used = spent[c] || 0;
+          return `<div class="budrow"><div class="budhead"><b>${esc(c)}</b><span class="muted">Gastado ${fmt(used)}${limit ? ` de ${fmt(limit)}` : ' · sin límite'}</span></div>
+            ${limit ? progress(used, limit) : ''}
+            <p class="muted">${limit ? (used > limit ? `Excedido en ${fmt(used - limit)}` : `Te quedan ${fmt(limit - used)}`) : 'Define un límite en Presupuesto.'}</p></div>`;
+        }).join('') : '<p class="muted">Agrega categorías en Presupuesto para ver aquí tus límites y gastos.</p>'}
+        <p class="muted">El gasto se actualiza con los movimientos registrados en cada categoría durante el mes seleccionado.</p>
+      </section>
+      <section class="card">
+        <div class="summary-head"><h3>Tus fondos y metas</h3><a href="#" data-tab="metas">Ver metas →</a></div>
+        <div class="reserve-grid">
+          <div><span>🛟 Fondo de emergencia</span><b>${fmt(reservedAmounts().emergency)}</b></div>
+          <div><span>🌱 Ahorro</span><b>${fmt(reservedAmounts().savings)}</b></div>
+        </div>
+        <p class="muted">Total reservado del sueldo: <b>${fmt(reserved)}</b> · acumulado de todos los meses.</p>
+        ${goals.length ? `<div class="home-goals">${goals.map(g => goalRow(g, true)).join('')}</div>` : '<p class="muted">Puedes agregar otras metas y ver su avance aquí.</p>'}
+      </section>
       <section class="card"><h3>¿En qué gastas?</h3><div class="donutwrap">${donut}</div></section>
       <section class="card"><h3>Últimos 6 meses</h3><div class="bars">${bars}</div>
         <p class="muted"><i class="dot bi"></i>Ingresos <i class="dot be"></i>Gastos</p></section>
-      ${goals.length ? `<section class="card"><h3>Metas y deudas</h3>${goals.map(g => goalRow(g)).join('')}</section>` : ''}`;
+      `;
   },
 
   movimientos() {

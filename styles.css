@@ -513,3 +513,12 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 
 .budget-repeat { display: flex; align-items: center; gap: 10px; min-height: 48px; margin-top: 8px; color: var(--muted); font-size: .9rem; }
 .budget-repeat input { flex: none; accent-color: var(--accent); }
+
+.summary-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.summary-head h3 { margin: 0; }
+.summary-head a { color: var(--accent); font-size: .85rem; display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; }
+.summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.summary-grid small { display: block; color: var(--muted); font-size: .8rem; }
+.summary-grid b { display: block; font-size: 1.1rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.home-goals { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+@media (max-width: 420px) { .summary-grid { grid-template-columns: 1fr; } .summary-grid > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; } }
