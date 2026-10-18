@@ -272,12 +272,13 @@ function cloudErr(err) {
 }
 function setCloud(state, error = '') { cloud.state = state; cloud.error = error; renderSyncStatus(); }
 
-function cloudInit() {
+async function cloudInit() {
   if (window.PREVIEW) { showScreen('app'); render(); return; }
   const cfgOk = window.FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId;
   if (!window.firebase || !cfgOk) { showScreen('setup'); return; }
   firebase.initializeApp(FIREBASE_CONFIG);
   cloud.auth = firebase.auth();
+  try { await cloud.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch { }
   cloud.db = firebase.firestore();
   try { cloud.db.enablePersistence({ synchronizeTabs: true }).catch(() => { }); } catch { }
   cloud.auth.onAuthStateChanged(u => (u ? onLogin(u) : onLogout()));
@@ -331,7 +332,7 @@ function onLogin(u) {
   cloud.status = null; cloud.seenSet = false; cloud.users = [];
   data = normalize(readJSON(userKey()));
   if (startMonth() > ui.month) ui.month = startMonth();
-  unlocked = !lockInfo();
+  unlocked = !lockInfo() || restoreAfterReload(u.uid);
   setStatusScreen('loading');
   // El perfil dice si la cuenta está aprobada, pendiente o bloqueada
   watchProfile();
@@ -407,6 +408,7 @@ function stopData() {
 }
 
 function onLogout() {
+  try { sessionStorage.removeItem(RELOAD_SESSION_KEY); } catch { }
   cloud.profile = null; renderBrand();
   stopData();
   if (cloud.profileUnsub) { try { cloud.profileUnsub(); } catch { } cloud.profileUnsub = null; }
@@ -672,6 +674,24 @@ function showAuthError(msg) { const e = $('#authError'); e.textContent = msg; e.
 /* ---------- bloqueo con Face ID / Touch ID / huella (WebAuthn) ---------- */
 let unlocked = true, hiddenAt = 0;
 const RELOCK_MS = 2 * 60 * 1000; // vuelve a pedir Face ID si la app estuvo cerrada más de 2 minutos
+const RELOAD_SESSION_KEY = 'finanzas.reloadSession';
+function restoreAfterReload(uid) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(RELOAD_SESSION_KEY) || 'null');
+    sessionStorage.removeItem(RELOAD_SESSION_KEY);
+    const navigation = performance.getEntriesByType('navigation')[0];
+    const elapsed = saved ? now() - saved.at : -1;
+    return !!(navigation && navigation.type === 'reload' && saved && saved.uid === uid && elapsed >= 0 && elapsed < RELOCK_MS);
+  } catch { return false; }
+}
+window.addEventListener('pagehide', () => {
+  try {
+    if (cloud.user && unlocked && cloud.status === 'activo' && (!hiddenAt || now() - hiddenAt < RELOCK_MS)) {
+      sessionStorage.setItem(RELOAD_SESSION_KEY, JSON.stringify({ uid: cloud.user.uid, at: now() }));
+    } else sessionStorage.removeItem(RELOAD_SESSION_KEY);
+  } catch { }
+});
+
 const rand = n => crypto.getRandomValues(new Uint8Array(n));
 const toB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const fromB64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
@@ -720,6 +740,7 @@ async function unlock() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { hiddenAt = now(); return; }
   if (cloud.user && lockInfo() && unlocked && hiddenAt && now() - hiddenAt > RELOCK_MS) { unlocked = false; showScreen('lock'); }
+  hiddenAt = 0;
 });
 
 /* ---------- vistas ---------- */
