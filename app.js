@@ -656,7 +656,7 @@ function viewerHTML() {
       <div class="moneyhead"><span>Dinero total</span><b class="${total < 0 ? 'neg' : ''}">${fmt(total)}</b></div>
       <ul class="acclist ro">${accs.map(a => `<li><span class="accicon">${accIcon(a)}</span><span class="accname">${esc(a.name)}</span><b>${fmt(bal[a.id] || 0)}</b></li>`).join('')}</ul>
       <div class="weekgrid"><div><small>Ingresos ${monthLabel(ui.month).split(' ')[0]}</small><b class="pos">${fmt(inc)}</b></div>
-        <div><small>Gastos</small><b class="neg">${fmt(exp)}</b></div><div><small>Disponible del mes</small><b class="${net >= 0 ? 'pos' : 'neg'}">${fmt(net)}</b></div></div>
+        <div><small>Gasto total</small><b class="neg">${fmt(exp)}</b></div><div><small>Disponible del mes</small><b class="${net >= 0 ? 'pos' : 'neg'}">${fmt(net)}</b></div></div>
       <h4 class="day">Últimos movimientos</h4>
       ${rows ? `<ul class="txlist ro">${rows}</ul>` : '<p class="muted">Todavía no registra movimientos.</p>'}
     </section>`;
@@ -982,7 +982,7 @@ const views = {
     let acc = 0;
     const stops = byCat.map(([c, v]) => { const a = acc / exp * 360; acc += v; return `${catColor(c)} ${a}deg ${acc / exp * 360}deg`; });
     const donut = exp > 0
-      ? `<div class="donut" style="background:conic-gradient(${stops.join(',')})"><div><small>Gastos</small><b>${fmt(exp)}</b></div></div>
+      ? `<div class="donut" style="background:conic-gradient(${stops.join(',')})"><div><small>Gasto total</small><b>${fmt(exp)}</b></div></div>
          <ul class="legend">${byCat.map(([c, v]) => `<li><i style="background:${catColor(c)}"></i><span>${esc(c)}</span><b>${fmt(v)}</b><em>${Math.round(v / exp * 100)}%</em></li>`).join('')}</ul>`
       : '<p class="empty" style="flex:1">Sin gastos este mes.</p>';
 
@@ -1029,7 +1029,7 @@ const views = {
       ${isAdmin() ? weekCard() : monthlyPayCard()}
       <section class="cards3">
         <div class="card stat"><small>Ingresos</small><b class="pos">${fmt(inc)}</b></div>
-        <div class="card stat"><small>Gastos</small><b class="neg">${fmt(exp)}</b></div>
+        <div class="card stat"><small>Gasto total</small><b class="neg">${fmt(exp)}</b></div>
         <div class="card stat"><small>Disponible del mes</small><b class="${bal >= 0 ? 'pos' : 'neg'}">${fmt(bal)}</b></div>
       </section>
       ${occasionalHomeCard()}
