@@ -333,3 +333,8 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .namerow .btn { flex: none; }
 .uinfo small + small { margin-top: 2px; }
 .brand { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.budinput label { color: var(--muted); }
+.budctl { display: flex; align-items: center; gap: 6px; }
+.iconbtn { width: 36px; height: 36px; flex: none; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: .9rem; }
+.iconbtn:hover { color: var(--neg); border-color: var(--neg); }
+.budrow + .row-end, .budrow ~ .row-end { padding-top: 14px; border-top: 1px solid var(--line); margin-top: 0; }

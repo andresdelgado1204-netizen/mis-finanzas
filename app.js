@@ -178,6 +178,9 @@ function weekCard() {
   </section>`;
 }
 
+function budgetCats() {
+  return live(data.budgets).filter(b => b.category).sort((a, b) => (a.createdAt || a.updatedAt || 0) - (b.createdAt || b.updatedAt || 0)).map(b => b.category);
+}
 function budgetFor(cat) { const b = data.budgets.find(b => b.id === 'b:' + cat && !b.deleted); return b ? b.amount : 0; }
 function catColor(cat) {
   const all = [...data.settings.categories.gasto, ...data.settings.categories.ingreso];
@@ -841,17 +844,23 @@ const views = {
 
   presupuesto() {
     const spent = spentByCat(ui.month);
-    const rows = data.settings.categories.gasto.map(c => {
+    const cats = budgetCats();
+    const addBtn = `<div class="row-end"><button class="btn" data-action="new-budget">+ Agregar categoría</button></div>`;
+    if (!cats.length) return `<section class="card"><h3>Límites por categoría</h3>
+      <p class="empty" style="padding:24px 12px">Todavía no tienes categorías en tu presupuesto.<br>Agrega las que quieras controlar, por ejemplo Supermercado o Transporte, con su límite mensual.</p>
+      ${addBtn}</section>`;
+    const rows = cats.map(c => {
       const b = budgetFor(c), s = spent[c] || 0;
       return `<div class="budrow">
         <div class="budhead"><b>${esc(c)}</b><span class="muted">${fmt(s)}${b ? ` / ${fmt(b)}` : ''}</span></div>
         ${b ? progress(s, b) : ''}
-        <label class="budinput">Límite mensual
-          <input type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}"></label>
+        <div class="budinput"><label for="bud-${esc(c)}">Límite mensual</label>
+          <span class="budctl"><input id="bud-${esc(c)}" type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}">
+          <button class="iconbtn" data-action="del-budget" data-cat="${esc(c)}" aria-label="Quitar ${esc(c)} del presupuesto" title="Quitar del presupuesto">✕</button></span></div>
       </div>`;
     }).join('');
     return `<section class="card"><h3>Límites por categoría</h3>
-      <p class="muted">Los límites se repiten todos los meses; el avance corresponde al mes seleccionado.</p>${rows}</section>`;
+      <p class="muted">Los límites se repiten todos los meses; el avance corresponde al mes seleccionado.</p>${rows}${addBtn}</section>`;
   },
 
   metas() {
@@ -1015,6 +1024,17 @@ function openAcc(a) {
     $('#accCalc').textContent = fmt(balances()[a.id] || 0);
   } else f.initial.value = 0;
   $('#accDialog').showModal();
+}
+
+function openBudget() {
+  const f = $('#budgetForm');
+  f.reset();
+  const used = new Set(budgetCats());
+  const free = data.settings.categories.gasto.filter(c => !used.has(c));
+  f.cat.innerHTML = free.map(c => `<option>${esc(c)}</option>`).join('') + '<option value="__new">➕ Nueva categoría…</option>';
+  if (!free.length) f.cat.value = '__new';
+  $('#budgetNewWrap').hidden = f.cat.value !== '__new';
+  $('#budgetDialog').showModal();
 }
 
 let editingGoal = null;
@@ -1191,6 +1211,13 @@ document.addEventListener('click', e => {
       break;
     }
     case 'new-acc': openAcc(); break;
+    case 'new-budget': openBudget(); break;
+    case 'del-budget': {
+      const cat = el.dataset.cat;
+      ask(`¿Quitar ${cat} del presupuesto? Tus movimientos de esta categoría no se borran.`, 'Quitar')
+        .then(ok => { if (ok) remove('budgets', 'b:' + cat); });
+      break;
+    }
     case 'edit-acc': openAcc(data.accounts.find(a => a.id === id)); break;
     case 'new-goal': openGoal(); break;
     case 'edit-goal': openGoal(data.goals.find(g => g.id === id)); break;
@@ -1317,10 +1344,14 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.name === 'cat' && el.form && el.form.id === 'budgetForm') {
+    $('#budgetNewWrap').hidden = el.value !== '__new';
+    if (el.value === '__new') setTimeout(() => el.form.newcat.focus(), 30);
+  }
   if (el.dataset.budget !== undefined) {
     const cat = el.dataset.budget, amount = parseAmount(el.value);
-    if (amount) upsert('budgets', { id: 'b:' + cat, category: cat, amount });
-    else remove('budgets', 'b:' + cat);
+    const old = data.budgets.find(b => b.id === 'b:' + cat);
+    upsert('budgets', { id: 'b:' + cat, category: cat, amount, createdAt: (old && old.createdAt) || now() });
   }
   if (el.id === 'importFile' && el.files[0]) {
     el.files[0].text().then(txt => {
@@ -1333,6 +1364,24 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'budgetForm') {
+    e.preventDefault();
+    const f = e.target;
+    let cat = f.cat.value === '__new' ? f.newcat.value.trim().replace(/\s+/g, ' ') : f.cat.value;
+    if (!cat) { toast('Escribe el nombre de la categoría'); return; }
+    cat = cat[0].toUpperCase() + cat.slice(1);
+    const exists = data.settings.categories.gasto.find(c => c.toLowerCase() === cat.toLowerCase());
+    if (exists) cat = exists;
+    if (budgetCats().includes(cat)) { toast(`${cat} ya está en tu presupuesto`); return; }
+    if (!exists) {
+      data.settings = Object.assign({}, data.settings, {
+        categories: { ...data.settings.categories, gasto: [...data.settings.categories.gasto, cat] }, updatedAt: now() });
+    }
+    upsert('budgets', { id: 'b:' + cat, category: cat, amount: parseAmount(f.amount.value), createdAt: now() });
+    $('#budgetDialog').close();
+    toast(`${cat} agregada al presupuesto`);
+    return;
+  }
   if (e.target.id === 'myNameForm') {
     e.preventDefault();
     saveName(cloud.user.uid, e.target.name.value);

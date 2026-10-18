@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
   <header class="top">
@@ -156,6 +156,22 @@
     </form>
   </dialog>
 
+  <!-- Agregar categoría al presupuesto -->
+  <dialog id="budgetDialog">
+    <form id="budgetForm" class="form">
+      <h3>Agregar categoría</h3>
+      <label>Categoría<select name="cat"></select></label>
+      <div id="budgetNewWrap" hidden>
+        <label>Nombre de la nueva categoría<input name="newcat" maxlength="30" placeholder="Ej. Mascotas"></label>
+      </div>
+      <label>Límite mensual<input name="amount" type="number" inputmode="decimal" min="0" step="any" placeholder="Ej. 150000" required></label>
+      <div class="row-end">
+        <button type="button" class="btn ghost" data-close>Cancelar</button>
+        <button class="btn">Agregar</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Confirmación -->
   <dialog id="askDialog" class="ask">
     <p id="askText"></p>
@@ -223,7 +239,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js?v=14"></script>
-  <script src="app.js?v=14"></script>
+  <script src="firebase-config.js?v=15"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>
