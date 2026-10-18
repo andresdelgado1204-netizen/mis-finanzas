@@ -295,13 +295,40 @@ function saveBudgetMonth(cat, amount, repeat, deleted = false) {
   upsert('budgets', { id: 'b:' + cat + ':' + ui.month, category: cat, month: ui.month,
     amount, repeat, deleted, createdAt: now() });
 }
+function budgetPaymentId(cat, month) {
+  const id = 'budget-pay:' + month + ':' + cat;
+  const existing = data.transactions.find(t => t.id === id && !t.deleted);
+  return existing && (existing.type !== 'gasto' || existing.category !== cat || existing.budgetMonth !== month || !existing.date.startsWith(month)) ? id + ':' + uid() : id;
+}
 function budgetPayment(cat, month = ui.month) {
   return live(data.transactions).find(t => t.type === 'gasto' && t.amount > 0 && t.category === cat && t.budgetMonth === month && t.date.startsWith(month));
 }
 function budgetPaidControl(cat) {
   const paid = budgetPayment(cat), amount = budgetFor(cat);
   return `<label class="budget-repeat budget-paid"><input type="checkbox" data-budget-pay="${esc(cat)}" ${paid ? 'checked disabled' : ''} ${amount > 0 ? '' : 'disabled'}>
-    ${paid ? `Pagado: ${fmt(paid.amount)} · ${esc(accName(accId(paid)))}` : 'Marcar como pagado'}</label>`;
+    ${paid ? `Pagado: ${fmt(paid.amount)} · ${esc(accName(accId(paid)))}` : 'Marcar como pagado'}</label>
+    ${paid ? `<button type="button" class="btn ghost edit-budget-payment" data-action="edit-tx" data-id="${esc(paid.id)}">Editar pago</button>` : ''}`;
+}
+function budgetBulkControl() {
+  const payable = budgetCats().filter(c => budgetFor(c) > 0);
+  const pending = payable.filter(c => !budgetPayment(c));
+  return `<label class="budget-repeat budget-pay-all"><input type="checkbox" data-budget-pay-all ${payable.length && !pending.length ? 'checked' : ''} ${pending.length ? '' : 'disabled'}> ${pending.length ? `Pagar todos los pendientes (${pending.length})` : (payable.length ? 'Todos los pagos registrados' : 'Agrega montos para registrar pagos')}</label>`;
+}
+let pendingBulkPayment = null;
+function openBulkBudgetPayment() {
+  const month = ui.month;
+  const items = budgetCats().filter(c => budgetFor(c) > 0 && !budgetPayment(c)).map(cat => ({ cat, amount: budgetFor(cat) }));
+  if (!items.length) return;
+  pendingBulkPayment = { month, items };
+  const f = $('#bulkBudgetForm'); f.reset();
+  $('#bulkBudgetTotal').textContent = fmt(items.reduce((sum, item) => sum + item.amount, 0));
+  const spent = spentByCat(month);
+  $('#bulkBudgetRows').innerHTML = items.map((item, index) => `<div class="bulk-budget-row"><b>${esc(item.cat)} · ${fmt(item.amount)}</b>
+    ${spent[item.cat] > 0 ? `<p class="muted">Ya hay ${fmt(spent[item.cat])} registrados en esta categoría; este pago se sumará.</p>` : ''}
+    <label>Cuenta para ${esc(item.cat)}<select name="account-${index}" required><option value="" disabled selected>Elige una cuenta</option>${accOptions('')}</select></label></div>`).join('');
+  f.date.min = month + '-01'; f.date.max = addDays(shiftMonth(month, 1) + '-01', -1);
+  f.date.value = today().startsWith(month) ? today() : month + '-01';
+  $('#bulkBudgetDialog').showModal();
 }
 let pendingBudgetPayment = null;
 function openBudgetPayment(cat) {
@@ -1045,7 +1072,7 @@ const views = {
       </div>`;
     }).join('');
     return `<section class="card budget-panel"><h3>Presupuesto del mes</h3>
-      <p class="muted">Planifica el monto y marca «Pagado» cuando salga el dinero. Activa «Repetir cada mes» para tus gastos habituales.</p>${addBtn}<div class="budget-items">${rows}</div></section>`;
+      <p class="muted">Planifica el monto y marca «Pagado» cuando salga el dinero. Activa «Repetir cada mes» para tus gastos habituales.</p>${addBtn}${budgetBulkControl()}<div class="budget-items">${rows}</div></section>`;
   },
 
   metas() {
@@ -1542,6 +1569,9 @@ document.addEventListener('change', e => {
     el.form.repeat.checked = defaultBudgetRepeat(el.value === '__new' ? el.form.newcat.value : el.value);
     if (el.value === '__new') setTimeout(() => el.form.newcat.focus(), 30);
   }
+  if (el.dataset.budgetPayAll !== undefined) {
+    el.checked = false; openBulkBudgetPayment();
+  }
   if (el.dataset.budgetPay !== undefined) {
     el.checked = false;
     openBudgetPayment(el.dataset.budgetPay);
@@ -1567,6 +1597,28 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'bulkBudgetForm') {
+    e.preventDefault();
+    const pending = pendingBulkPayment, f = e.target;
+    if (!pending) return;
+    if (!f.date.value.startsWith(pending.month)) { toast('Elige una fecha del mes seleccionado'); return; }
+    const selected = pending.items.map((item, index) => ({ ...item, account: f.elements.namedItem('account-' + index).value }));
+    if (selected.some(item => !accounts().some(a => a.id === item.account))) { toast('Elige la cuenta de cada gasto'); return; }
+    let added = 0;
+    for (const item of selected) {
+      if (budgetPayment(item.cat, pending.month)) continue;
+      const tx = { id: budgetPaymentId(item.cat, pending.month), type: 'gasto', category: item.cat,
+        amount: item.amount, account: item.account, date: f.date.value, budgetMonth: pending.month,
+        note: 'Pago del presupuesto', createdAt: now(), updatedAt: now() };
+      const index = data.transactions.findIndex(t => t.id === tx.id);
+      if (index >= 0) data.transactions[index] = tx; else data.transactions.push(tx);
+      added++;
+    }
+    pendingBulkPayment = null;
+    $('#bulkBudgetDialog').close();
+    if (added) commit(); else render();
+    toast(added ? `${added} pagos registrados` : 'Los pagos ya estaban registrados'); return;
+  }
   if (e.target.id === 'budgetPayForm') {
     e.preventDefault();
     const pending = pendingBudgetPayment, f = e.target;
@@ -1574,7 +1626,7 @@ document.addEventListener('submit', e => {
     if (budgetPayment(pending.cat, pending.month)) { $('#budgetPayDialog').close(); render(); toast('Este pago ya está registrado'); return; }
     if (!accounts().some(a => a.id === f.account.value)) { toast('Elige una cuenta'); return; }
     if (!f.date.value.startsWith(pending.month)) { toast('Elige una fecha del mes seleccionado'); return; }
-    upsert('transactions', { id: 'budget-pay:' + pending.month + ':' + pending.cat, type: 'gasto',
+    upsert('transactions', { id: budgetPaymentId(pending.cat, pending.month), type: 'gasto',
       category: pending.cat, amount: pending.amount, account: f.account.value, date: f.date.value,
       budgetMonth: pending.month, note: 'Pago del presupuesto', createdAt: now() });
     pendingBudgetPayment = null;

@@ -14,7 +14,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <script src="theme.js?v=21"></script>
-  <link rel="stylesheet" href="styles.css?v=30">
+  <link rel="stylesheet" href="styles.css?v=31">
 </head>
 <body>
   <header class="top">
@@ -174,6 +174,17 @@
     </form>
   </dialog>
 
+  <dialog id="bulkBudgetDialog">
+    <form id="bulkBudgetForm" class="form">
+      <h3>Pagar gastos pendientes</h3>
+      <p>Total: <b id="bulkBudgetTotal"></b></p>
+      <p class="muted">Elige de dónde salió el dinero de cada gasto. Solo se registrarán al confirmar.</p>
+      <label>Fecha de los pagos<input name="date" type="date" required></label>
+      <div id="bulkBudgetRows"></div>
+      <div class="row-end"><button type="button" class="btn ghost" data-close>Cancelar</button><button class="btn">Registrar todos los gastos</button></div>
+    </form>
+  </dialog>
+
   <dialog id="budgetPayDialog">
     <form id="budgetPayForm" class="form">
       <h3 id="budgetPayTitle">Registrar pago</h3>
@@ -256,6 +267,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=15"></script>
-  <script src="app.js?v=30"></script>
+  <script src="app.js?v=31"></script>
 </body>
 </html>
