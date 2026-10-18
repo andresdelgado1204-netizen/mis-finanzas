@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mis Finanzas</title>
+  <meta name="description" content="Gastos, presupuesto y metas, sincronizados con GitHub">
+  <meta name="theme-color" content="#4f7cff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Finanzas">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Mis Finanzas</div>
+    <button id="syncBtn" class="sync" data-action="sync" title="Sincronizar ahora"><i></i><span>Sin configurar</span></button>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="inicio"><span>🏠</span>Inicio</button>
+    <button data-tab="movimientos"><span>🧾</span>Movimientos</button>
+    <button data-tab="presupuesto"><span>📊</span>Presupuesto</button>
+    <button data-tab="metas"><span>🎯</span>Metas</button>
+    <button data-tab="ajustes"><span>⚙️</span>Ajustes</button>
+  </nav>
+
+  <div id="monthbar" class="monthbar">
+    <button data-action="prev-month" aria-label="Mes anterior">‹</button>
+    <b id="monthLabel"></b>
+    <button data-action="next-month" aria-label="Mes siguiente">›</button>
+  </div>
+
+  <main id="view"></main>
+
+  <button id="fab" class="fab" data-action="new-tx" aria-label="Agregar movimiento">+</button>
+  <div id="toast" class="toast" role="status"></div>
+
+  <!-- Movimiento -->
+  <dialog id="txDialog">
+    <form id="txForm" class="form">
+      <h3 id="txTitle">Nuevo movimiento</h3>
+      <div class="seg" id="txType">
+        <button type="button" data-type="gasto">Gasto</button>
+        <button type="button" data-type="ingreso">Ingreso</button>
+        <button type="button" data-type="transferencia">Mover</button>
+      </div>
+      <label>Monto<input name="amount" type="number" inputmode="decimal" min="0" step="any" required></label>
+      <label id="catLabel">Categoría<select name="category" required></select></label>
+      <label><span id="accLabel">Pagado con</span><select name="account"></select></label>
+      <label id="toLabel" hidden>Hacia<select name="to"></select></label>
+      <label>Fecha<input name="date" type="date" required></label>
+      <label>Nota<input name="note" maxlength="120" placeholder="Opcional"></label>
+      <div class="row-end">
+        <button type="button" class="btn ghost danger" id="txDelete">Eliminar</button>
+        <button type="button" class="btn ghost" data-close>Cancelar</button>
+        <button class="btn">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Meta / deuda -->
+  <dialog id="goalDialog">
+    <form id="goalForm" class="form">
+      <h3 id="goalTitle">Nueva meta</h3>
+      <label>Tipo
+        <select name="kind">
+          <option value="ahorro">Meta de ahorro</option>
+          <option value="deuda">Deuda a pagar</option>
+        </select>
+      </label>
+      <label>Nombre<input name="name" maxlength="60" required placeholder="Ej. Fondo de emergencia"></label>
+      <label>Monto objetivo / total de la deuda<input name="target" type="number" inputmode="decimal" min="0" step="any" required></label>
+      <label>Llevas ahorrado / pagado<input name="current" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+      <label>Fecha límite<input name="deadline" type="date"></label>
+      <div class="row-end">
+        <button type="button" class="btn ghost danger" id="goalDelete">Eliminar</button>
+        <button type="button" class="btn ghost" data-close>Cancelar</button>
+        <button class="btn">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Abono -->
+  <dialog id="contribDialog">
+    <form id="contribForm" class="form">
+      <h3 id="contribTitle">Abonar</h3>
+      <label>Monto<input name="amount" type="number" inputmode="decimal" min="0" step="any" required></label>
+      <label>Fecha<input name="date" type="date" required></label>
+      <label>Desde la cuenta<select name="account"></select></label>
+      <label class="check"><input name="asTx" type="checkbox" checked> Registrarlo también como gasto en Movimientos</label>
+      <div class="row-end">
+        <button type="button" class="btn ghost" data-close>Cancelar</button>
+        <button class="btn">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Cuenta -->
+  <dialog id="accDialog">
+    <form id="accForm" class="form">
+      <h3 id="accTitle">Nueva cuenta</h3>
+      <label>Nombre<input name="name" maxlength="40" required placeholder="Ej. Cuenta RUT, Cuenta corriente"></label>
+      <label>Tipo
+        <select name="kind">
+          <option value="banco">Cuenta bancaria</option>
+          <option value="efectivo">Efectivo</option>
+        </select>
+      </label>
+      <label>Saldo al empezar a registrar<input name="initial" type="number" inputmode="decimal" step="any"></label>
+      <div id="accAdjust">
+        <label>¿Cuánto tienes realmente hoy?<input name="real" type="number" inputmode="decimal" step="any" placeholder="Opcional"></label>
+        <p class="muted" style="margin:-6px 0 12px">Según tus movimientos tienes <b id="accCalc"></b>. Si escribes otro monto, se registra un ajuste para cuadrar.</p>
+      </div>
+      <div class="row-end">
+        <button type="button" class="btn ghost danger" id="accDelete">Eliminar</button>
+        <button type="button" class="btn ghost" data-close>Cancelar</button>
+        <button class="btn">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Confirmación -->
+  <dialog id="askDialog" class="ask">
+    <p id="askText"></p>
+    <div class="row-end">
+      <button type="button" class="btn ghost" id="askCancel">Cancelar</button>
+      <button type="button" class="btn dangerfill" id="askOk">Aceptar</button>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
