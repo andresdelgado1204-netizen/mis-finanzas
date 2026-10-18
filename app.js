@@ -123,6 +123,23 @@ function reservedAmounts(txs = live(data.transactions)) {
     return out;
   }, { emergency: 0, savings: 0, total: 0 });
 }
+function occasionalExpenses(month = ui.month) {
+  return txOfMonth(month).filter(t => t.type === 'gasto' && !t.budgetMonth)
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
+}
+function occasionalHomeCard() {
+  const expenses = occasionalExpenses();
+  const total = expenses.reduce((sum, item) => sum + item.amount, 0);
+  return `<section class="card occasional-summary">
+    <div class="summary-head"><h3>Gastos ocasionales</h3><a href="#" data-tab="movimientos">Ver gastos →</a></div>
+    <p class="occasional-total neg">${fmt(total)}</p>
+    <p class="muted">Total del mes seleccionado · separado de tus gastos mensuales.</p>
+    ${expenses.length ? `<details class="occasional-details"><summary>Ver detalle (${expenses.length})</summary>
+      <ul class="txlist">${expenses.map(t => txRow(t).replace('</small>', ` · ${esc(fmtDate(t.date))}</small>`)).join('')}</ul>
+    </details>` : '<p class="muted">Aquí aparecerán los gastos que agregues con un nombre, como una salida o una reparación.</p>'}
+    <button type="button" class="btn wide" data-action="new-tx">+ Agregar gasto ocasional</button>
+  </section>`;
+}
 function reservesCard() {
   const rates = reserveRates(), saved = reservedAmounts();
   const period = isAdmin() ? 'semanal' : 'mensual';
@@ -288,7 +305,7 @@ function activeBudget(cat, month = ui.month) {
   return selected && !selected.deleted && (budgetRepeats(selected) || budgetMonth(selected) === month) ? selected : null;
 }
 function budgetCats() {
-  return [...new Set(data.budgets.map(b => b.category).filter(Boolean))].filter(c => activeBudget(c));
+  return [...new Set(data.budgets.map(b => b.category).filter(c => c && c !== 'Gastos ocasionales'))].filter(c => activeBudget(c));
 }
 function budgetFor(cat, month = ui.month) { return activeBudget(cat, month)?.amount || 0; }
 function saveBudgetMonth(cat, amount, repeat, deleted = false) {
@@ -1015,6 +1032,7 @@ const views = {
         <div class="card stat"><small>Gastos</small><b class="neg">${fmt(exp)}</b></div>
         <div class="card stat"><small>Disponible del mes</small><b class="${bal >= 0 ? 'pos' : 'neg'}">${fmt(bal)}</b></div>
       </section>
+      ${occasionalHomeCard()}
       <div class="summary-head budget-summary-title"><h3>Gastos mensuales</h3><a href="#" data-tab="presupuesto">Ver gastos mensuales →</a></div>
       <section class="cards3" aria-label="Resumen de gastos mensuales">
         <div class="card stat"><small>Gasto previsto</small><b>${fmt(budTotal)}</b></div>
@@ -1040,7 +1058,7 @@ const views = {
   },
 
   movimientos() {
-    let txs = txOfMonth(ui.month);
+    let txs = txOfMonth(ui.month).filter(t => !t.budgetMonth);
     if (ui.filter !== 'todos') txs = txs.filter(t => t.type === ui.filter);
     txs.sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
     const groups = {};
@@ -1259,7 +1277,7 @@ function openBudget() {
   const f = $('#budgetForm');
   f.reset();
   const used = new Set(budgetCats());
-  const free = data.settings.categories.gasto.filter(c => !used.has(c));
+  const free = data.settings.categories.gasto.filter(c => c !== 'Gastos ocasionales' && !used.has(c));
   f.cat.innerHTML = free.map(c => `<option>${esc(c)}</option>`).join('') + '<option value="__new">➕ Nueva categoría…</option>';
   if (!free.length) f.cat.value = '__new';
   $('#budgetNewWrap').hidden = f.cat.value !== '__new';
