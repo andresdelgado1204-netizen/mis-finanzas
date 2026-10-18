@@ -55,6 +55,28 @@ function readJSON(k) { try { const v = localStorage.getItem(k); return v ? JSON.
 function writeJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { toast('No se pudo guardar en este dispositivo'); } }
 
 /* ---------- datos ---------- */
+// Reinicio de todas las cuentas solicitado por el propietario el 18-10-2026.
+// La marca evita que las copias anteriores vuelvan a traer registros al sincronizar.
+const FINANCE_RESET_AT = 1792353164369;
+function resetOldFinancialItem(list, item) {
+  const stamp = list === 'accounts' ? (item.updatedAt || 0) : (item.createdAt || item.updatedAt || 0);
+  if (stamp >= FINANCE_RESET_AT) return item;
+  if (list === 'accounts') {
+    const original = DEFAULT_ACCOUNTS.find(a => a.id === item.id);
+    if (original) return { ...original, initial: 0, updatedAt: FINANCE_RESET_AT };
+  }
+  return { id: item.id, deleted: true, updatedAt: FINANCE_RESET_AT };
+}
+function resetOldFinancialData(d) {
+  if ((d.settings.financeResetAt || 0) < FINANCE_RESET_AT) {
+    const reserves = d.settings.salaryReserves || { emergency: 10, savings: 10 };
+    d.settings = { ...emptyData().settings, salaryReserves: reserves, financeResetAt: FINANCE_RESET_AT, updatedAt: Math.max(FINANCE_RESET_AT, d.settings.updatedAt || 0) };
+  }
+  for (const list of ['transactions', 'budgets', 'goals', 'accounts']) d[list] = d[list].map(item => resetOldFinancialItem(list, item));
+  for (const account of DEFAULT_ACCOUNTS) if (!d.accounts.some(a => a.id === account.id)) d.accounts.push({ ...account, initial: 0, updatedAt: FINANCE_RESET_AT });
+  return d;
+}
+
 function emptyData() {
   return { version: 1, settings: { currency: 'CLP', startMonth: '2026-11', payday: 5, categories: clone(DEFAULT_CATS), updatedAt: 0 }, transactions: [], budgets: [], goals: [], accounts: clone(DEFAULT_ACCOUNTS) };
 }
@@ -65,7 +87,7 @@ function normalize(d) {
   d.settings.categories = Object.assign(clone(DEFAULT_CATS), d.settings.categories || {});
   for (const k of ['transactions', 'budgets', 'goals', 'accounts']) if (!Array.isArray(d[k])) d[k] = [];
   if (!d.accounts.length) d.accounts = clone(DEFAULT_ACCOUNTS);
-  return d;
+  return resetOldFinancialData(d);
 }
 
 let data = normalize(window.PREVIEW_DATA || null);
@@ -665,6 +687,7 @@ function viewerHTML() {
 
 function applyRemote(list, item) {
   cloud.known[list + '/' + item.id] = item.updatedAt || 0;
+  item = resetOldFinancialItem(list, item);
   const i = data[list].findIndex(x => x.id === item.id);
   if (i < 0) { data[list].push(item); return true; }
   if ((item.updatedAt || 0) > (data[list][i].updatedAt || 0)) { data[list][i] = item; return true; }
@@ -687,8 +710,11 @@ function onListSnap(list, snap) {
 function onSettingsSnap(doc) {
   let changed = false;
   if (doc.exists) {
-    const st = doc.data();
+    let st = doc.data();
     cloud.known.settings = st.updatedAt || 0;
+    if ((st.financeResetAt || 0) < FINANCE_RESET_AT) {
+      st = { ...data.settings, financeResetAt: FINANCE_RESET_AT, updatedAt: Math.max(FINANCE_RESET_AT, data.settings.updatedAt || 0) };
+    }
     if ((st.updatedAt || 0) > (data.settings.updatedAt || 0)) {
       data.settings = normalize({ settings: st }).settings; changed = true;
     }
