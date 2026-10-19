@@ -1063,8 +1063,11 @@ const views = {
   },
 
   inicio() {
-    const { exp } = totals(ui.month);
-    const byCat = Object.entries(spentByCat(ui.month)).sort((a, b) => b[1] - a[1]);
+    // Gastos ocio: los gastos sueltos del mes (no incluye los gastos mensuales)
+    const ocio = {};
+    for (const t of occasionalExpenses()) ocio[t.category] = (ocio[t.category] || 0) + t.amount;
+    const byCat = Object.entries(ocio).sort((a, b) => b[1] - a[1]);
+    const exp = byCat.reduce((s, [, v]) => s + v, 0);
     const spent = spentByCat(ui.month);
     const budCats = budgetCats().filter(c => budgetFor(c) > 0);
     const budTotal = budCats.reduce((s, c) => s + budgetFor(c), 0);
@@ -1094,20 +1097,21 @@ const views = {
     // 3. En qué gastas: una barra delgada y la lista corta
     const top = byCat.slice(0, 4), rest = byCat.slice(4).reduce((s, [, v]) => s + v, 0);
     const spendCard = `<section class="card">
-        <div class="summary-head"><h3>Gastos</h3><a href="#" data-tab="movimientos">Ver todo</a></div>
+        <div class="summary-head"><h3>Gastos ocio</h3><a href="#" data-tab="movimientos">Ver todo</a></div>
         ${exp > 0 ? `<div class="hbig">${fmt(exp)}</div>
           <div class="stackbar" role="img" aria-label="Gastos por categoría">${byCat.map(([c, v]) => `<span style="width:${v / exp * 100}%;background:${catColor(c)}"></span>`).join('')}</div>
           <ul class="mlist">${top.map(([c, v]) => `<li><i style="background:${catColor(c)}"></i><span>${esc(c)}</span><b>${fmt(v)}</b></li>`).join('')}
             ${rest > 0 ? `<li><i style="background:var(--line)"></i><span>Otros</span><b>${fmt(rest)}</b></li>` : ''}</ul>`
-          : '<p class="muted">Sin gastos este mes</p>'}
+          : '<p class="muted">Sin gastos de ocio este mes</p>'}
       </section>`;
 
-    // 4. Gastos mensuales: solo si hay montos previstos
-    const budCard = budTotal > 0 ? `<section class="card">
-        <div class="summary-head"><h3>Gastos mensuales</h3><a href="#" data-tab="presupuesto">Ver todo</a></div>
-        <div class="kv"><span>Pagado</span><b>${fmt(budSpent)} <small>de ${fmt(budTotal)}</small></b></div>
-        ${progress(budSpent, budTotal)}
-      </section>` : '';
+    // 4. Gastos mensuales, con acceso directo para agregar uno
+    const budCard = `<section class="card">
+        <div class="summary-head"><h3>Gastos mensuales</h3>${budTotal > 0 ? '<a href="#" data-tab="presupuesto">Ver todo</a>' : ''}</div>
+        ${budTotal > 0 ? `<div class="kv"><span>Pagado</span><b>${fmt(budSpent)} <small>de ${fmt(budTotal)}</small></b></div>
+        ${progress(budSpent, budTotal)}` : '<p class="muted" style="margin:0">Anota tus gastos fijos, como arriendo o cuentas.</p>'}
+        <button type="button" class="slink addbud" data-action="new-budget">+ Agregar gasto mensual</button>
+      </section>`;
 
     // 5. La meta que elijas (o la primera) + tus fondos en una línea
     const homeGoal = goals.find(g => g.id === data.settings.homeGoal) || goals[0];

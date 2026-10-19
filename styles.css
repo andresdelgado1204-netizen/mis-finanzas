@@ -799,3 +799,4 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .pinhome.on { color: var(--accent); font-weight: 600; }
 /* pantalla de ingreso con el color elegido */
 :root[data-accent] .gatelogo { box-shadow: 0 6px 18px color-mix(in srgb, var(--btn) 30%, transparent); }
+.addbud { display: block; margin: 10px -8px -4px; }
