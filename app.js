@@ -229,6 +229,24 @@ function roundSave(v) {
   const step = ['CLP', 'COP', 'ARS'].includes(data.settings.currency) ? 1000 : 1;
   return Math.round((Number(v) || 0) / step) * step;
 }
+// Ingresos que separan ahorro: Sueldo, los que parecen pago de trabajo, o los que la persona marcó
+const SALARY_RE = /sueldo|salario|semanal|quincena|remuneraci|pago (mensual|semanal)|mensualidad trabajo/i;
+function reservesByDefault(cat) {
+  if (!cat) return false;
+  const marked = data.settings.reserveCats;
+  if (Array.isArray(marked) && marked.includes(cat)) return true;
+  if (Array.isArray(data.settings.noReserveCats) && data.settings.noReserveCats.includes(cat)) return false;
+  return cat === 'Sueldo' || SALARY_RE.test(plainName(cat));
+}
+function updateReserveBox() {
+  const f = $('#txForm'), wrap = $('#reserveWrap'), r = reserveRates();
+  const show = txType === 'ingreso' && r.emergency + r.savings > 0;
+  wrap.hidden = !show;
+  if (!show) return;
+  $('#reserveText').textContent = `💰 Separar para mis fondos (${r.emergency}% emergencia + ${r.savings}% ahorro)`;
+  const cat = f.category.value === '__new_category__' ? f.newCategory.value.trim() : f.category.value;
+  f.separate.checked = (editingTx && editingTx.type === 'ingreso' && editingTx.category === cat && editingTx.reserves) ? true : reservesByDefault(cat);
+}
 function salaryReserves(amount, rates) {
   const emergency = roundSave(amount * rates.emergency / 100);
   const savings = roundSave(amount * rates.savings / 100);
@@ -236,7 +254,7 @@ function salaryReserves(amount, rates) {
 }
 function reservedAmounts(txs = live(data.transactions)) {
   return txs.reduce((out, t) => {
-    if (t.type === 'ingreso' && t.category === 'Sueldo' && t.reserves) {
+    if (t.type === 'ingreso' && t.reserves) {
       out.emergency += roundSave(t.reserves.emergency);
       out.savings += roundSave(t.reserves.savings);
     }
@@ -1391,6 +1409,7 @@ function setTxType(type, selected) {
   $('#payMethodWrap').hidden = type !== 'ingreso' || accountMode() !== 'ambos';
   $('#accField').hidden = type === 'ingreso';
   if (!isTr) fillCategories(type, selected);
+  updateReserveBox();
   const nameField = $('#txForm').newCategory;
   nameField.readOnly = false;
   $('#txNewCategoryTitle').textContent = 'Nombre de la nueva categoría';
@@ -1460,7 +1479,7 @@ function txRow(t) {
     sub = t.type === 'ingreso' ? (methodOf(t) === 'efectivo' ? '💵 Efectivo' : '🏦 Transferencia') : esc(accName(accId(t)));
     amount = (t.type === 'ingreso' ? '+' : '−') + fmt(t.amount); cls = t.type === 'ingreso' ? 'pos' : 'neg';
   }
-  if (t.reserves && t.type === 'ingreso' && t.category === 'Sueldo') sub += ` · Emergencia ${fmt(t.reserves.emergency)} · Ahorro ${fmt(t.reserves.savings)}`;
+  if (t.reserves && t.type === 'ingreso') sub += ` · Emergencia ${fmt(t.reserves.emergency)} · Ahorro ${fmt(t.reserves.savings)}`;
   const color = t.type === 'transferencia' || t.type === 'ajuste' ? 'var(--muted)' : catColor(t.category);
   return `<li data-action="edit-tx" data-id="${t.id}">
     <i style="background:${color}"></i>
@@ -1754,8 +1773,14 @@ $('#txForm').addEventListener('submit', e => {
       if (!account) { toast(payMethod === 'efectivo' ? 'Crea una cuenta de efectivo en Inicio' : 'Crea una cuenta bancaria en Inicio'); return; }
       try { localStorage.setItem('finanzas.ultimoMetodo', payMethod); } catch { }
     } else rememberAccount(account);
-    if (txType === 'ingreso' && category === 'Sueldo' && (!editingTx || editingTx.reserves)) {
+    if (txType === 'ingreso' && f.separate.checked && !$('#reserveWrap').hidden) {
       base.reserves = salaryReserves(amount, editingTx?.reserves?.rates || reserveRates());
+    }
+    if (txType === 'ingreso' && !$('#reserveWrap').hidden) {
+      // se recuerda la elección para la próxima vez con esta categoría
+      const on = new Set(data.settings.reserveCats || []), off = new Set(data.settings.noReserveCats || []);
+      if (f.separate.checked) { on.add(category); off.delete(category); } else { off.add(category); on.delete(category); }
+      data.settings = Object.assign({}, data.settings, { reserveCats: [...on], noReserveCats: [...off], updatedAt: now() });
     }
     if ((creatingCategory || txType === 'gasto') && !data.settings.categories[txType].includes(category)) {
       data.settings.categories[txType].push(category);
@@ -1866,6 +1891,7 @@ document.addEventListener('change', e => {
     el.form.newCategory.disabled = !creating;
     el.form.newCategory.required = creating;
     if (creating) el.form.newCategory.focus();
+    updateReserveBox();
   }
   if (el.dataset.budgetPayAll !== undefined) {
     el.checked = false; openBulkBudgetPayment();
