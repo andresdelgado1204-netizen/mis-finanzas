@@ -173,7 +173,7 @@ function resetOldFinancialData(d) {
 }
 
 function emptyData() {
-  return { version: 1, settings: { currency: 'CLP', startMonth: '2026-11', payday: 5, categories: clone(DEFAULT_CATS), updatedAt: 0 }, transactions: [], budgets: [], goals: [], accounts: clone(DEFAULT_ACCOUNTS) };
+  return { version: 1, settings: { currency: 'CLP', startMonth: '2026-10', payday: 5, categories: clone(DEFAULT_CATS), updatedAt: 0 }, transactions: [], budgets: [], goals: [], accounts: clone(DEFAULT_ACCOUNTS) };
 }
 function normalize(d) {
   const base = emptyData();
@@ -600,7 +600,16 @@ function cloudErr(err) {
   if (c.includes('unavailable') || !navigator.onLine) return 'Sin conexión: tus cambios se guardan y se subirán solos cuando vuelva internet.';
   return 'No se pudo sincronizar todavía. Se reintentará automáticamente.';
 }
-function setCloud(state, error = '') { cloud.state = state; cloud.error = error; renderSyncStatus(); if (state === 'ok') restoreLock(); }
+function setCloud(state, error = '') { cloud.state = state; cloud.error = error; renderSyncStatus(); if (state === 'ok') { restoreLock(); startFromOctober(); } }
+// Una sola vez: todas las cuentas empiezan en octubre de 2026 (si alguien la empezó antes, se respeta)
+function startFromOctober() {
+  // solo cuando ya llegaron los ajustes reales de la cuenta desde la nube
+  if (!cloud.user || window.PREVIEW || cloud.status !== 'activo' || !cloud.server.has('settings') || data.settings.inicioOctubre) return;
+  const patch = { inicioOctubre: true, updatedAt: now() };
+  if (!data.settings.startMonth || data.settings.startMonth > '2026-10') patch.startMonth = '2026-10';
+  data.settings = Object.assign({}, data.settings, patch);
+  setTimeout(() => { commit(); render(); }, 0);
+}
 
 async function cloudInit() {
   if (window.PREVIEW) { showScreen('app'); render(); return; }
@@ -879,6 +888,7 @@ function onSettingsSnap(doc) {
   }
   if (!doc.metadata.fromCache) cloud.server.add('settings');
   afterRemote(changed);
+  if (!doc.metadata.fromCache) setTimeout(() => { startFromOctober(); restoreLock(); }, 0);
 }
 
 function cloudPush() {
@@ -1081,7 +1091,7 @@ function restoreLock() {
   if (cur) {
     // quienes ya lo tenían activado: se respalda una vez en su cuenta (cuando ya está sincronizada)
     const ids = data.settings.faceIds || [];
-    if (cloud.state === 'ok' && cloud.status === 'activo' && !ids.includes(cur.credId) && !cur.credIds) {
+    if (cloud.state === 'ok' && cloud.status === 'activo' && cloud.server.has('settings') && !ids.includes(cur.credId) && !cur.credIds) {
       data.settings = Object.assign({}, data.settings, { faceIds: [...ids, cur.credId].slice(-6), updatedAt: now() });
       setTimeout(commit, 0);
     }
