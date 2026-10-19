@@ -509,7 +509,7 @@ function cloudErr(err) {
   if (c.includes('unavailable') || !navigator.onLine) return 'Sin conexión: tus cambios se guardan y se subirán solos cuando vuelva internet.';
   return 'No se pudo sincronizar todavía. Se reintentará automáticamente.';
 }
-function setCloud(state, error = '') { cloud.state = state; cloud.error = error; renderSyncStatus(); }
+function setCloud(state, error = '') { cloud.state = state; cloud.error = error; renderSyncStatus(); if (state === 'ok') restoreLock(); }
 
 async function cloudInit() {
   if (window.PREVIEW) { showScreen('app'); render(); return; }
@@ -960,7 +960,12 @@ async function enableLock() {
       authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
       timeout: 60000, attestation: 'none',
     } });
-    writeJSON(LS_LOCK, { uid: cloud.user.uid, credId: toB64u(cred.rawId) });
+    const credId = toB64u(cred.rawId);
+    writeJSON(LS_LOCK, { uid: cloud.user.uid, credId });
+    // se guarda también en tu cuenta, así no se pierde cuando la app se actualiza o se reinstala
+    const ids = [...new Set([...(data.settings.faceIds || []), credId])].slice(-6);
+    data.settings = Object.assign({}, data.settings, { faceIds: ids, updatedAt: now() });
+    commit();
     unlocked = true; render(); toast('Listo: la próxima vez entras con Face ID / huella');
   } catch (e) { toast('No se activó el bloqueo: se canceló o no se pudo verificar.'); }
 }
@@ -971,14 +976,36 @@ function offerFaceId() {
   try { localStorage.setItem(LS_FACE_ASKED + '.' + cloud.user.uid, '1'); } catch { }
   setTimeout(() => $('#faceDialog').showModal(), 400);
 }
-function disableLock() { try { localStorage.removeItem(LS_LOCK); } catch { } render(); toast('Bloqueo desactivado'); }
+function disableLock() {
+  try { localStorage.removeItem(LS_LOCK); } catch { }
+  data.settings = Object.assign({}, data.settings, { faceIds: [], updatedAt: now() });
+  commit(); render(); toast('Bloqueo desactivado');
+}
+// Si este equipo perdió el ajuste (por una actualización o al reinstalar), se recupera desde tu cuenta
+function restoreLock() {
+  if (!cloud.user || window.PREVIEW) return;
+  const cur = lockInfo();
+  if (cur) {
+    // quienes ya lo tenían activado: se respalda una vez en su cuenta (cuando ya está sincronizada)
+    const ids = data.settings.faceIds || [];
+    if (cloud.state === 'ok' && cloud.status === 'activo' && !ids.includes(cur.credId) && !cur.credIds) {
+      data.settings = Object.assign({}, data.settings, { faceIds: [...ids, cur.credId].slice(-6), updatedAt: now() });
+      setTimeout(commit, 0);
+    }
+    return;
+  }
+  const ids = data.settings.faceIds;
+  if (!Array.isArray(ids) || !ids.length) return;
+  writeJSON(LS_LOCK, { uid: cloud.user.uid, credId: ids[ids.length - 1], credIds: ids });
+  try { localStorage.setItem(LS_FACE_ASKED + '.' + cloud.user.uid, '1'); } catch { }
+}
 async function unlock() {
   const l = lockInfo();
   if (!l) { unlocked = true; showScreen('app'); return; }
   try {
     await navigator.credentials.get({ publicKey: {
       challenge: rand(32), timeout: 60000, userVerification: 'required',
-      allowCredentials: [{ type: 'public-key', id: fromB64u(l.credId), transports: ['internal'] }],
+      allowCredentials: (l.credIds || [l.credId]).map(id => ({ type: 'public-key', id: fromB64u(id), transports: ['internal', 'hybrid'] })),
     } });
     unlocked = true; showScreen('app'); render();
   } catch { toast('No se pudo verificar. Intenta de nuevo o usa tu contraseña.'); }
@@ -1252,6 +1279,7 @@ const views = {
 
 function render() {
   applyAccent();
+  restoreLock();
   renderBrand();
   $('#adminTab').hidden = !showAdmin();
   if (ui.tab === 'admin' && !showAdmin()) ui.tab = 'inicio';
