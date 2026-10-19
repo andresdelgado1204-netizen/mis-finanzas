@@ -608,6 +608,8 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 :root[data-theme="dark"][data-accent="morado"] { --accent: #c4a6ff; --accent-soft: #2c2346; --btn: #6a43bb; }
 :root[data-accent="rosa"], :root[data-theme="light"][data-accent="rosa"] { --accent: #b23c6f; --accent-soft: #fae7ef; --btn: #b23c6f; }
 :root[data-theme="dark"][data-accent="rosa"] { --accent: #f7a3c7; --accent-soft: #3a2030; --btn: #b23c6f; }
+:root[data-accent="rojo"], :root[data-theme="light"][data-accent="rojo"] { --accent: #c22f35; --accent-soft: #fbe5e6; --btn: #c22f35; }
+:root[data-theme="dark"][data-accent="rojo"] { --accent: #ff9b9f; --accent-soft: #3b1f22; --btn: #c22f35; }
 :root[data-accent="terracota"], :root[data-theme="light"][data-accent="terracota"] { --accent: #ad512a; --accent-soft: #f8e8df; --btn: #ad512a; }
 :root[data-theme="dark"][data-accent="terracota"] { --accent: #f2a77f; --accent-soft: #3a271c; --btn: #ad512a; }
 :root[data-accent="dorado"], :root[data-theme="light"][data-accent="dorado"] { --accent: #8a6508; --accent-soft: #f5eedb; --btn: #8a6508; }
@@ -662,7 +664,7 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .sinline { display: flex; gap: 8px; margin-top: 6px; }
 .sinline input { flex: 1; min-width: 0; }
 .sinline .btn { flex: none; }
-.cdots { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; justify-items: center; }
+.cdots { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; justify-items: center; }
 .cdot { width: 30px; height: 30px; border-radius: 50%; border: 0; padding: 0; position: relative; background: var(--sw); }
 .cdot.on::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--sw); }
 .cdot:focus-visible { outline: 2px solid var(--text); outline-offset: 4px; }
@@ -800,3 +802,5 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 /* pantalla de ingreso con el color elegido */
 :root[data-accent] .gatelogo { box-shadow: 0 6px 18px color-mix(in srgb, var(--btn) 30%, transparent); }
 .addbud { display: block; margin: 10px -8px -4px; }
+.cdots { grid-template-columns: repeat(5, 1fr); row-gap: 14px; max-width: 300px; }
+.cdot { width: 34px; height: 34px; }

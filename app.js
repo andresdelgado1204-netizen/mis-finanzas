@@ -28,6 +28,7 @@ const ACCENTS = [
   { key: 'grafito', name: 'Grafito', color: '#3d4552' },
   { key: 'morado', name: 'Morado', color: '#6a43bb' },
   { key: 'rosa', name: 'Rosa', color: '#b23c6f' },
+  { key: 'rojo', name: 'Rojo', color: '#c22f35' },
   { key: 'terracota', name: 'Terracota', color: '#ad512a' },
   { key: 'dorado', name: 'Dorado', color: '#8a6508' },
 ];
@@ -38,7 +39,8 @@ function sessionAccent() {
   const uid = cloud.user ? cloud.user.uid : '';
   if (!uid) return '';
   let h = 0; for (const ch of uid) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return ACCENTS[h % ACCENTS.length].key;
+  const base = ACCENTS.filter(a => a.key !== 'rojo'); // así no cambia el color de quienes nunca eligieron uno
+  return base[h % base.length].key;
 }
 function applyAccent() {
   let k = sessionAccent();
@@ -54,6 +56,67 @@ const CURRENCY_NAMES = { CLP: 'Peso chileno', USD: 'Dólar estadounidense', EUR:
   COP: 'Peso colombiano', MXN: 'Peso mexicano', BRL: 'Real brasileño', UYU: 'Peso uruguayo' };
 
 /* ---------- utilidades ---------- */
+/* ---------- emojis según el nombre (solo para mostrar, no se guardan) ---------- */
+const EMOJI_RULES = [
+  ['🏢', 'gastos comunes|condominio|administracion edificio'],
+  ['🏠', 'arriendo|alquiler|renta casa|hipoteca|dividendo|vivienda|casa'],
+  ['💡', 'luz|electricidad|electrica|enel|cge|chilquinta'],
+  ['💧', 'agua|aguas andinas|esval|essbio'],
+  ['🔥', 'gas(?![a-z])|lipigas|abastible|gasco|metrogas|calefaccion|parafina|lena'],
+  ['🌐', 'internet|wifi|fibra|vtr|mundo|gtd'],
+  ['📱', 'telefono|celular|movil|entel|movistar|wom|claro'],
+  ['📺', 'netflix|disney|hbo|max|prime video|amazon prime|paramount|star\\+|star plus|youtube|streaming|television|cable|directv|suscripcion'],
+  ['🎵', 'spotify|musica|deezer|apple music'],
+  ['☁️', 'icloud|google one|dropbox|nube'],
+  ['🛒', 'supermercado|super|mercado|lider|jumbo|unimarc|tottus|santa isabel|almacen|feria|despensa|verduleria'],
+  ['🍽️', 'comida fuera|restaurante|restoran|almuerzo|cena|delivery|rappi|uber eats|pedidos ya|pedidosya|comida'],
+  ['☕', 'cafe|starbucks|cafeteria'],
+  ['🍞', 'pan(?![a-z])|panaderia'],
+  ['⛽', 'bencina|combustible|gasolina|nafta|copec|shell|petrobras'],
+  ['🚗', 'auto|carro|estacionamiento|peaje|tag|autopista|mantencion auto|taller|revision tecnica|permiso de circulacion'],
+  ['🚌', 'transporte|bus|micro|metro|bip|pasaje|uber|taxi|didi|cabify|colectivo'],
+  ['💊', 'farmacia|remedio|medicamento|cruz verde|salcobrand|ahumada'],
+  ['🦷', 'dentista|dental|odontolog'],
+  ['🩺', 'salud|doctor|medico|clinica|consulta|isapre|fonasa|examen|hospital'],
+  ['🏋️', 'gimnasio|gym|deporte|smartfit|crossfit|futbol|piscina'],
+  ['🎓', 'educacion|colegio|universidad|u\\b|curso|matricula|jardin|mensualidad colegio|clases|libros'],
+  ['🐾', 'mascota|perro|gato|veterinari|alimento perro|alimento gato'],
+  ['👕', 'ropa|zapato|zapatilla|vestuario|polera'],
+  ['💇', 'peluqueria|barberia|belleza|manicure|unas|cosmetic|maquillaje'],
+  ['🎁', 'regalo|cumpleanos|cumple|navidad'],
+  ['✈️', 'viaje|vacacion|hotel|vuelo|avion|airbnb|turismo'],
+  ['🎬', 'cine|pelicula|teatro|concierto|entrada'],
+  ['🎮', 'juego|videojuego|playstation|xbox|nintendo|steam'],
+  ['🍻', 'carrete|bar|cerveza|copete|salida|fiesta'],
+  ['🎉', 'ocio|entretencion|panorama|diversion'],
+  ['🛡️', 'seguro'],
+  ['💳', 'credito|deuda|prestamo|tarjeta|cuota|pago de deudas|avance'],
+  ['🐷', 'ahorro|ahorrar'],
+  ['🛋️', 'hogar|mueble|decoracion|electrodomestico'],
+  ['🔧', 'reparacion|arreglo|ferreteria|gasfiter|electricista|sodimac|easy'],
+  ['🧹', 'limpieza|aseo|nana|lavanderia'],
+  ['🍼', 'bebe|panales|guagua|hijo|hija|ninos'],
+  ['🧾', 'cuentas|servicios|boleta|impuesto|contribuciones|sii'],
+  ['💼', 'sueldo|salario|remuneracion|pago semanal|pago mensual'],
+  ['🧑‍💻', 'freelance|honorario|pega|trabajo extra|proyecto'],
+  ['🏷️', 'venta|ventas|vendi'],
+  ['↩️', 'reembolso|devolucion'],
+  ['📈', 'inversion|interes|dividendos|acciones|fondo mutuo|cripto'],
+  ['🎊', 'bono|aguinaldo|premio'],
+  ['💰', 'otros ingresos|ingreso'],
+  ['📦', 'otros|otro|varios'],
+].map(([e, words]) => [e, new RegExp('(^|[^a-z])(' + words + ')', 'i')]);
+const plainName = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const startsWithEmoji = s => /^\p{Extended_Pictographic}/u.test(String(s || '').trim());
+function emojiFor(name, fallback = '') {
+  if (!name || startsWithEmoji(name)) return '';
+  const n = plainName(name);
+  for (const [e, re] of EMOJI_RULES) if (re.test(n)) return e;
+  return fallback;
+}
+// "🏠 Arriendo" (escapado para HTML)
+const withEmoji = (name, fallback = '') => { const e = emojiFor(name, fallback); return (e ? e + ' ' : '') + esc(name); };
+
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -431,7 +494,7 @@ function openBulkBudgetPayment() {
   const spent = spentByCat(month);
   $('#bulkBudgetRows').innerHTML = items.map((item, index) => `<div class="bulk-budget-row"><b>${esc(item.cat)} · ${fmt(item.amount)}</b>
     ${spent[item.cat] > 0 ? `<p class="muted">Ya hay ${fmt(spent[item.cat])} registrados en esta categoría; este pago se sumará.</p>` : ''}
-    <label>Cuenta para ${esc(item.cat)}<select name="account-${index}" required><option value="" disabled selected>Elige una cuenta</option>${accOptions('')}</select></label></div>`).join('');
+    <label>Cuenta para ${withEmoji(item.cat)}<select name="account-${index}" required><option value="" disabled selected>Elige una cuenta</option>${accOptions('')}</select></label></div>`).join('');
   f.date.min = month + '-01'; f.date.max = addDays(shiftMonth(month, 1) + '-01', -1);
   f.date.value = today().startsWith(month) ? today() : month + '-01';
   $('#bulkBudgetDialog').showModal();
@@ -443,7 +506,7 @@ function openBudgetPayment(cat) {
   pendingBudgetPayment = { cat, month: ui.month, amount };
   const f = $('#budgetPayForm');
   f.reset();
-  $('#budgetPayTitle').textContent = 'Pagar ' + cat;
+  $('#budgetPayTitle').textContent = 'Pagar ' + ((emojiFor(cat) ? emojiFor(cat) + ' ' : '') + cat);
   $('#budgetPayAmount').textContent = fmt(amount);
   f.account.innerHTML = '<option value="" disabled selected>Elige una cuenta</option>' + accOptions('');
   f.date.min = ui.month + '-01';
@@ -1044,7 +1107,7 @@ function goalRow(g, full) {
       : ' · plazo vencido';
   } else if (g.current >= g.target && g.target > 0) extra = isDebt ? ' · ¡deuda pagada! 🎉' : ' · ¡meta cumplida! 🎉';
   return `<div class="goal">
-    <div class="budhead"><b>${isDebt ? '💳' : '🎯'} ${esc(g.name)}</b><span class="muted">${Math.round(p)}%</span></div>
+    <div class="budhead"><b>${withEmoji(g.name, isDebt ? '💳' : '🎯')}</b><span class="muted">${Math.round(p)}%</span></div>
     ${progress(g.current, g.target, isDebt ? 'debt' : 'goalp')}
     <p class="muted">${label}${full ? extra : ''}</p>
     ${full ? `<div class="row-end">
@@ -1136,7 +1199,7 @@ const views = {
         <div class="summary-head"><h3>Gastos ocio</h3><a href="#" data-tab="movimientos">Ver todo</a></div>
         ${exp > 0 ? `<div class="hbig">${fmt(exp)}</div>
           <div class="stackbar" role="img" aria-label="Gastos por categoría">${byCat.map(([c, v]) => `<span style="width:${v / exp * 100}%;background:${catColor(c)}"></span>`).join('')}</div>
-          <ul class="mlist">${top.map(([c, v]) => `<li><i style="background:${catColor(c)}"></i><span>${esc(c)}</span><b>${fmt(v)}</b></li>`).join('')}
+          <ul class="mlist">${top.map(([c, v]) => `<li><i style="background:${catColor(c)}"></i><span>${withEmoji(c, '🧾')}</span><b>${fmt(v)}</b></li>`).join('')}
             ${rest > 0 ? `<li><i style="background:var(--line)"></i><span>Otros</span><b>${fmt(rest)}</b></li>` : ''}</ul>`
           : '<p class="muted">Sin gastos de ocio este mes</p>'}
       </section>`;
@@ -1184,7 +1247,7 @@ const views = {
     const rows = cats.map(c => {
       const b = budgetFor(c), s = spent[c] || 0;
       return `<div class="budrow">
-        <div class="budhead"><b>${esc(c)}</b><span class="muted">${fmt(s)}${b ? ` / ${fmt(b)}` : ''}</span></div>
+        <div class="budhead"><b>${withEmoji(c, '🧾')}</b><span class="muted">${fmt(s)}${b ? ` / ${fmt(b)}` : ''}</span></div>
         ${b ? progress(s, b) : ''}
         <div class="budinput"><label for="bud-${esc(c)}">Monto previsto</label>
           <span class="budctl"><input id="bud-${esc(c)}" type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}">
@@ -1301,7 +1364,7 @@ function fillCategories(type, selected) {
   const sel = $('#txForm').category;
   const cats = [...data.settings.categories[type]];
   if (selected && !cats.includes(selected)) cats.push(selected);
-  sel.innerHTML = cats.map(c => `<option ${c === selected ? 'selected' : ''}>${esc(c)}</option>`).join('') + `<option value="__new_category__">${type === 'gasto' ? '➕ Agregar nuevo gasto…' : '➕ Nueva categoría de ingreso…'}</option>`;
+  sel.innerHTML = cats.map(c => `<option value="${esc(c)}" ${c === selected ? 'selected' : ''}>${withEmoji(c)}</option>`).join('') + `<option value="__new_category__">${type === 'gasto' ? '➕ Agregar nuevo gasto…' : '➕ Nueva categoría de ingreso…'}</option>`;
 }
 function setTxType(type, selected) {
   txType = type;
@@ -1376,13 +1439,13 @@ function openTransfer() {
 function txRow(t) {
   let title, sub, amount, cls;
   if (t.type === 'transferencia') {
-    title = 'Mover dinero'; sub = `${esc(accName(t.from))} → ${esc(accName(t.to))}`;
+    title = '⇄ Mover dinero'; sub = `${esc(accName(t.from))} → ${esc(accName(t.to))}`;
     amount = fmt(t.amount); cls = 'neutral';
   } else if (t.type === 'ajuste') {
-    title = 'Ajuste de saldo'; sub = esc(accName(accId(t)));
+    title = '⚖️ Ajuste de saldo'; sub = esc(accName(accId(t)));
     amount = (t.amount >= 0 ? '+' : '−') + fmt(Math.abs(t.amount)); cls = 'neutral';
   } else {
-    title = esc(t.expenseName || t.category);
+    title = withEmoji(t.expenseName || t.category, emojiFor(t.category, t.type === 'ingreso' ? '💰' : '🧾'));
     sub = t.type === 'ingreso' ? (methodOf(t) === 'efectivo' ? '💵 Efectivo' : '🏦 Transferencia') : esc(accName(accId(t)));
     amount = (t.type === 'ingreso' ? '+' : '−') + fmt(t.amount); cls = t.type === 'ingreso' ? 'pos' : 'neg';
   }
