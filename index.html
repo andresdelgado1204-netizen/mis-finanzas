@@ -161,13 +161,10 @@
   <!-- Agregar categoría a gastos mensuales -->
   <dialog id="budgetDialog">
     <form id="budgetForm" class="form">
-      <h3>Agregar categoría</h3>
-      <label>Categoría<select name="cat"></select></label>
-      <div id="budgetNewWrap" hidden>
-        <label>Nombre de la nueva categoría<input name="newcat" maxlength="30" placeholder="Ej. Mascotas"></label>
-      </div>
+      <h3>Agregar gasto mensual</h3>
+      <label>¿Qué gasto es?<input name="newcat" maxlength="30" placeholder="Ej. Arriendo, luz, internet" autocomplete="off" required></label>
+      <label>Monto<input name="amount" type="number" inputmode="decimal" min="0" step="any" placeholder="Ej. 150000" required></label>
       <label class="check"><input name="repeat" type="checkbox"> Repetir cada mes</label>
-      <label>Límite mensual<input name="amount" type="number" inputmode="decimal" min="0" step="any" placeholder="Ej. 150000" required></label>
       <div class="row-end">
         <button type="button" class="btn ghost" data-close>Cancelar</button>
         <button class="btn">Agregar</button>
@@ -267,6 +264,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=15"></script>
-  <script src="app.js?v=58"></script>
+  <script src="app.js?v=59"></script>
 </body>
 </html>

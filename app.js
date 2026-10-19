@@ -1177,7 +1177,7 @@ const views = {
   presupuesto() {
     const spent = spentByCat(ui.month);
     const cats = budgetCats();
-    const addBtn = `<div class="row-end"><button class="btn" data-action="new-budget">+ Agregar categoría</button></div>`;
+    const addBtn = `<div class="row-end"><button class="btn" data-action="new-budget">+ Agregar gasto mensual</button></div>`;
     if (!cats.length) return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
       <p class="empty" style="padding:24px 12px">Aún no tienes gastos mensuales.<br>Agrega los fijos, como arriendo o supermercado.</p>
       ${addBtn}</section>` + sixMonthsCard();
@@ -1416,13 +1416,9 @@ function openAcc(a) {
 function openBudget() {
   const f = $('#budgetForm');
   f.reset();
-  const used = new Set(budgetCats());
-  const free = data.settings.categories.gasto.filter(c => c !== 'Gastos ocasionales' && !used.has(c));
-  f.cat.innerHTML = free.map(c => `<option>${esc(c)}</option>`).join('') + '<option value="__new">➕ Nueva categoría…</option>';
-  if (!free.length) f.cat.value = '__new';
-  $('#budgetNewWrap').hidden = f.cat.value !== '__new';
-  f.repeat.checked = defaultBudgetRepeat(f.cat.value === '__new' ? '' : f.cat.value);
+  f.repeat.checked = false; delete f.repeat.dataset.touched;
   $('#budgetDialog').showModal();
+  setTimeout(() => f.newcat.focus(), 50);
 }
 
 let editingGoal = null;
@@ -1786,11 +1782,7 @@ document.addEventListener('change', e => {
     data.settings = Object.assign({}, data.settings, { currency: el.value, updatedAt: now() });
     commit(); toast(`Moneda: ${el.value} – ${CURRENCY_NAMES[el.value]}`);
   }
-  if (el.name === 'cat' && el.form && el.form.id === 'budgetForm') {
-    $('#budgetNewWrap').hidden = el.value !== '__new';
-    el.form.repeat.checked = defaultBudgetRepeat(el.value === '__new' ? el.form.newcat.value : el.value);
-    if (el.value === '__new') setTimeout(() => el.form.newcat.focus(), 30);
-  }
+  if (el.name === 'repeat' && el.form?.id === 'budgetForm') el.dataset.touched = '1';
   if (el.name === 'category' && el.form?.id === 'txForm') {
     const creating = el.value === '__new_category__';
     $('#txNewCategoryWrap').hidden = !creating;
@@ -1817,7 +1809,6 @@ document.addEventListener('change', e => {
     const cat = el.dataset.budgetRepeat;
     saveBudgetMonth(cat, budgetFor(cat), el.checked);
   }
-  if (el.name === 'newcat' && el.form?.id === 'budgetForm') el.form.repeat.checked = defaultBudgetRepeat(el.value);
   if (el.dataset.budget !== undefined) {
     const cat = el.dataset.budget, amount = parseAmount(el.value);
     const old = activeBudget(cat);
@@ -1883,19 +1874,19 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'budgetForm') {
     e.preventDefault();
     const f = e.target;
-    let cat = f.cat.value === '__new' ? f.newcat.value.trim().replace(/\s+/g, ' ') : f.cat.value;
-    if (!cat) { toast('Escribe el nombre de la categoría'); return; }
+    let cat = f.newcat.value.trim().replace(/\s+/g, ' ');
+    if (!cat) { toast('Escribe qué gasto es'); return; }
     cat = cat[0].toUpperCase() + cat.slice(1);
     const exists = data.settings.categories.gasto.find(c => c.toLowerCase() === cat.toLowerCase());
     if (exists) cat = exists;
-    if (budgetCats().includes(cat)) { toast(`${cat} ya está en tu presupuesto`); return; }
+    if (budgetCats().includes(cat)) { toast(`${cat} ya está en tus gastos mensuales`); return; }
     if (!exists) {
       data.settings = Object.assign({}, data.settings, {
         categories: { ...data.settings.categories, gasto: [...data.settings.categories.gasto, cat] }, updatedAt: now() });
     }
     saveBudgetMonth(cat, parseAmount(f.amount.value), f.repeat.checked);
     $('#budgetDialog').close();
-    toast(`${cat} agregada a gastos mensuales`);
+    toast(`${cat} agregado a gastos mensuales`);
     return;
   }
   if (e.target.id === 'myNameForm') {
