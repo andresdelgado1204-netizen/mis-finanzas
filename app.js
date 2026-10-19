@@ -217,11 +217,18 @@ function sixMonthsCard() {
   const months = [...Array(6)].map((_, i) => shiftMonth(first, i));
   const series = months.map(m => totals(m));
   const inc = series.reduce((a, t) => a + t.inc, 0), exp = series.reduce((a, t) => a + t.exp, 0);
-  const max = Math.max(1, ...series.map(t => Math.max(t.inc, t.exp)));
+  const sum = inc + exp, share = sum ? inc / sum * 100 : 0;
   return `<section class="card six">
     <div class="summary-head"><h3>Últimos 6 meses</h3><span class="muted">${monthLabel(months[0], true)} – ${monthLabel(months[5], true)}</span></div>
-    <div class="sixbars">${series.map((t, i) => `<div><span class="b inc" style="height:${t.inc / max * 100}%"></span><span class="b exp" style="height:${t.exp / max * 100}%"></span><small>${monthLabel(months[i], true).slice(0, 3)}</small></div>`).join('')}</div>
-    <ul class="mlist"><li><i style="background:var(--inc)"></i><span>Ingresos</span><b>${fmt(inc)}</b></li><li><i style="background:var(--exp)"></i><span>Gastos</span><b>${fmt(exp)}</b></li></ul>
+    <div class="donutwrap six-months">
+      <div class="donut" role="img" aria-label="Últimos seis meses: ingresos ${fmt(inc)}, gastos ${fmt(exp)}" style="background:${sum ? `conic-gradient(var(--inc) 0% ${share}%, var(--exp) ${share}% 100%)` : 'var(--line)'}">
+        <div><small>Balance</small><b class="${inc - exp >= 0 ? 'pos' : 'neg'}">${fmt(inc - exp)}</b></div>
+      </div>
+      <ul class="legend">
+        <li><i style="background:var(--inc)"></i><span>Ingresos</span><b>${fmt(inc)}</b><em>${sum ? Math.round(share) : 0}%</em></li>
+        <li><i style="background:var(--exp)"></i><span>Gastos</span><b>${fmt(exp)}</b><em>${sum ? 100 - Math.round(share) : 0}%</em></li>
+      </ul>
+    </div>
   </section>`;
 }
 
@@ -1135,7 +1142,7 @@ const views = {
       `<button class="${ui.filter === f ? 'on' : ''}" data-action="filter" data-v="${f}">${{ todos: 'Todos', gasto: 'Gastos', ingreso: 'Ingresos' }[f]}</button>`).join('');
     const list = Object.entries(groups).map(([d, ts]) => `<h4 class="day">${dayLabel(d)}</h4>
       <ul class="txlist">${ts.map(txRow).join('')}</ul>`).join('');
-    return `<div class="seg">${seg}</div>${list || '<p class="empty">No hay movimientos este mes.<br>Toca + para agregar uno.</p>'}` + sixMonthsCard();
+    return `<div class="seg">${seg}</div>${list || '<p class="empty">No hay movimientos este mes.<br>Toca + para agregar uno.</p>'}`;
   },
 
   presupuesto() {
@@ -1144,7 +1151,7 @@ const views = {
     const addBtn = `<div class="row-end"><button class="btn" data-action="new-budget">+ Agregar categoría</button></div>`;
     if (!cats.length) return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
       <p class="empty" style="padding:24px 12px">Aún no tienes gastos mensuales.<br>Agrega los fijos, como arriendo o supermercado.</p>
-      ${addBtn}</section>`;
+      ${addBtn}</section>` + sixMonthsCard();
     const rows = cats.map(c => {
       const b = budgetFor(c), s = spent[c] || 0;
       return `<div class="budrow">
@@ -1158,7 +1165,7 @@ const views = {
       </div>`;
     }).join('');
     return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
-      <p class="muted">Planifica tus gastos fijos y márcalos como pagados.</p>${addBtn}${budgetBulkControl()}<div class="budget-items">${rows}</div></section>`;
+      <p class="muted">Planifica tus gastos fijos y márcalos como pagados.</p>${addBtn}${budgetBulkControl()}<div class="budget-items">${rows}</div></section>` + sixMonthsCard();
   },
 
   metas() {
