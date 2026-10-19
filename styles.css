@@ -831,3 +831,4 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .ftotal b { font-size: 1.05rem; }
 .hfunds .fsplit { margin-top: 2px; border: 0; padding: 0; }
 .reserves .ftotal { margin: 10px 0 12px; }
+.smonth { font: inherit; text-transform: capitalize; }

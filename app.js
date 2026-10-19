@@ -1346,6 +1346,8 @@ const views = {
       <section class="card slist">
         ${moneyRow('efectivo', '💵', 'Efectivo')}
         ${moneyRow('banco', '🏦', 'Banco')}
+        <label class="srow" for="startSel"><span>📅 Registro desde</span>
+          <input type="month" id="startSel" class="sselect smonth" value="${esc(data.settings.startMonth || '')}" max="2099-12" required></label>
       </section>
       <p class="snote">Elige qué cuentas aparecen en Inicio. Las que apagues quedan ocultas, no se borran.</p>
 
@@ -1917,6 +1919,11 @@ document.addEventListener('change', e => {
       el.checked = false;
       openBudgetPayment(cat);
     }
+  }
+  if (el.id === 'startSel' && /^\d{4}-\d{2}$/.test(el.value)) {
+    data.settings = Object.assign({}, data.settings, { startMonth: el.value, inicioOctubre: true, updatedAt: now() });
+    if (ui.month < el.value) ui.month = el.value;
+    commit(); toast('Tus registros empiezan en ' + monthLabel(el.value));
   }
   if (el.dataset.budgetRepeat !== undefined) {
     const cat = el.dataset.budgetRepeat;
