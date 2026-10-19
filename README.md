@@ -2,7 +2,7 @@
 
 App de finanzas personales para iPhone, iPad y Mac. Se instala desde el navegador y guarda tus datos en tu cuenta, así que lo que anotas en el teléfono aparece al instante en el computador, y al revés.
 
-**App:** https://andresdelgado1204-netizen.github.io/mis-finanzas/
+**App:** https://misfinanzashoy.pages.dev/
 
 ## Qué hace
 
@@ -10,6 +10,7 @@ App de finanzas personales para iPhone, iPad y Mac. Se instala desde el navegado
 - Saldos de **Efectivo** y **Banco**, mover dinero entre cuentas y cuadrar saldo
 - **Semana de pago** (de viernes a jueves): cuánto recibiste, gastaste y te queda, y cuánto puedes gastar por día
 - Presupuesto mensual por categoría, gráficos y metas de ahorro o deudas
+- En Ajustes, cada cuenta elige el período del resumen de Inicio: día, semana, quincena o mes
 - Registro desde noviembre de 2026
 - Funciona sin internet y se sincroniza cuando vuelve la conexión
 
