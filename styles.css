@@ -807,3 +807,20 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 /* con el color rojo, los montos negativos van en naranjo oscuro para no confundirse con los botones */
 :root[data-accent="rojo"], :root[data-theme="light"][data-accent="rojo"] { --neg: #c2410c; }
 :root[data-theme="dark"][data-accent="rojo"] { --neg: #ffa36b; }
+
+/* ===== Admin minimalista ===== */
+.atop { display: flex; justify-content: flex-end; margin: -4px 0 8px; }
+.ausers, .ausers + .slist { margin-bottom: 12px; }
+.ahead span { font-weight: 600; }
+.acount { display: inline-block !important; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent) !important; font-weight: 600; font-size: .78rem !important; }
+.auser { align-items: flex-start; justify-content: flex-start; gap: 12px; padding: 14px 0 8px; }
+.avatar.sm { width: 36px; height: 36px; font-size: .95rem; margin-top: 2px; }
+.auser .uinfo { flex: 1; min-width: 0; }
+.auser .uinfo b { font-weight: 600; font-size: .95rem; }
+.auser .uinfo small { display: block; color: var(--muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ulinks { display: flex; flex-wrap: wrap; gap: 2px; margin: 4px -8px 0; }
+.ulinks .slink { font-size: .82rem; padding: 6px 8px; }
+.slink.danger { color: var(--neg); }
+.aadd span { font-weight: 600; }
+.alinks { justify-content: flex-start; gap: 6px; min-height: 48px; margin: 0 -8px; width: calc(100% + 16px); padding-left: 0; }
+.alinks .slink { font-size: .88rem; text-decoration: none; }

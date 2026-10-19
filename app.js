@@ -617,6 +617,8 @@ function renderBrand() {
 }
 
 const LS_PERSONAL = 'finanzas.modoPersonal';
+const LS_ADMUSERS = 'finanzas.adminUsuariosAbierto';
+const adminUsersOpen = () => { try { return localStorage.getItem(LS_ADMUSERS) === '1'; } catch { return false; } };
 const personalMode = () => { try { return localStorage.getItem(LS_PERSONAL) === '1'; } catch { return false; } };
 function setPersonalMode(on) {
   try { on ? localStorage.setItem(LS_PERSONAL, '1') : localStorage.removeItem(LS_PERSONAL); } catch { }
@@ -1131,34 +1133,32 @@ const views = {
         <div class="uacts"><button class="btn ghost danger" data-action="adm-reject" data-id="${u.uid}">Rechazar</button>
         <button class="btn" data-action="adm-approve" data-id="${u.uid}">Aprobar</button></div></div>`).join('')}
       </section>` : '';
-    const listHTML = `<section class="card"><h3>Usuarios (${others.length})</h3>
-      ${others.map(u => { const [lbl, cls] = STATUS[u.status] || ['—', '']; const self = u.uid === me; return `<div class="urow">
-        <div class="uinfo"><b>${esc(personName(u, u.email))}${self ? ' <span class="chip">Tú · admin</span>' : ''}</b>
-          <small>${esc(shownName(u.email))}</small>
-          <small><span class="chip ${cls}">${lbl}</span> Registro ${fmtDay(u.createdAt)} · Último uso ${agoText(u.lastSeen)}</small></div>
-        <div class="uacts"><button class="btn ghost" data-action="adm-name" data-id="${u.uid}">Nombre</button>${self ? '' : `<button class="btn ghost" data-action="adm-view" data-id="${u.uid}">Ver finanzas</button>
-          ${u.status === 'bloqueado' ? `<button class="btn ghost" data-action="adm-unblock" data-id="${u.uid}">Desbloquear</button>`
-            : `<button class="btn ghost danger" data-action="adm-block" data-id="${u.uid}">Bloquear</button>`}`}</div></div>`; }).join('') || '<p class="muted">Aún no hay usuarios.</p>'}
+    const open = adminUsersOpen();
+    const listHTML = `<section class="card slist ausers">
+      <button type="button" class="srow chev ahead" data-action="adm-users-toggle" aria-expanded="${open}"><span>👥 Usuarios <small class="acount">${others.length}</small></span></button>
+      ${open ? (others.map(u => { const [lbl, cls] = STATUS[u.status] || ['—', '']; const self = u.uid === me; const nm = personName(u, u.email); return `<div class="srow auser">
+        <div class="avatar sm" aria-hidden="true">${esc((nm || '?').trim()[0] || '?').toUpperCase()}</div>
+        <div class="uinfo"><b>${esc(nm)}${self ? ' <span class="chip">Tú</span>' : ''}${u.status === 'bloqueado' ? ` <span class="chip ${cls}">${lbl}</span>` : ''}</b>
+          <small>${esc(shownName(u.email))} · ${agoText(u.lastSeen)}</small>
+          <div class="ulinks"><button class="slink" data-action="adm-name" data-id="${u.uid}">Nombre</button>${self ? '' : `<button class="slink" data-action="adm-view" data-id="${u.uid}">Ver finanzas</button>
+          ${u.status === 'bloqueado' ? `<button class="slink" data-action="adm-unblock" data-id="${u.uid}">Desbloquear</button>`
+            : `<button class="slink danger" data-action="adm-block" data-id="${u.uid}">Bloquear</button>`}`}</div></div></div>`; }).join('') || '<p class="muted">Aún no hay usuarios.</p>') : ''}
       </section>`;
-    const top = `<div class="row-end" style="margin:0 0 14px"><button class="btn ghost" data-action="personal-on">👤 Ver solo mis finanzas</button></div>`;
+    const top = `<div class="atop"><button class="slink" data-action="personal-on">👤 Ver solo mis finanzas</button></div>`;
     const nc = ui.newCreds;
     const credsHTML = nc ? `<div class="creds">
         <b>✓ Cuenta creada. Envíale estos datos a la persona:</b>
         <pre id="credsText">${esc(credsText(nc))}</pre>
         <div class="row-end"><button class="btn ghost" data-action="adm-creds-close">Listo</button><button class="btn" data-action="adm-copy">Copiar datos</button></div>
       </div>` : '';
-    const addHTML = `<section class="card"><h3>Agregar persona</h3>
-      <p class="muted" style="margin-bottom:12px">Las cuentas se crean en Firebase. Cuando agregas a alguien ahí, ya puede entrar a la app con ese correo y contraseña, y aparece en esta lista.</p>
-      <ol class="steps">
-        <li>Toca <b>Abrir Firebase</b> y luego <b>Agregar usuario</b>.</li>
-        <li>Escribe el correo y una contraseña de al menos 6 caracteres.</li>
-        <li>Envíale a la persona el enlace de la app, su correo y su contraseña.</li>
-      </ol>
-      <div class="row-end">
-        <button class="btn ghost" data-action="adm-copy-link">Copiar enlace de la app</button>
-        <a class="btn" href="${FIREBASE_USERS_URL}" target="_blank" rel="noopener">Abrir Firebase</a>
-      </div></section>`;
-    return top + viewerHTML() + addHTML + pendHTML + listHTML;
+    const addHTML = `<section class="card slist">
+      <div class="srow aadd"><span>➕ Agregar persona<small>Se crea en Firebase con correo y contraseña</small></span></div>
+      <div class="srow alinks">
+        <button type="button" class="slink" data-action="adm-copy-link">🔗 Copiar enlace</button>
+        <a class="slink" href="${FIREBASE_USERS_URL}" target="_blank" rel="noopener">Abrir Firebase ↗</a>
+      </div>
+    </section>`;
+    return top + viewerHTML() + pendHTML + listHTML + addHTML;
   },
 
   inicio() {
@@ -1599,6 +1599,9 @@ document.addEventListener('click', e => {
       break;
     }
     case 'adm-close': ui.viewing = null; render(); break;
+    case 'adm-users-toggle':
+      try { localStorage.setItem(LS_ADMUSERS, adminUsersOpen() ? '0' : '1'); } catch { }
+      render(); break;
     case 'adm-name': {
       const u = cloud.users.find(x => x.uid === id);
       openNameDialog(id, u ? personName(u, u.email) : '', u ? shownName(u.email) : '');
