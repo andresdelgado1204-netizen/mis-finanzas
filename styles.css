@@ -804,3 +804,6 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .addbud { display: block; margin: 10px -8px -4px; }
 .cdots { grid-template-columns: repeat(5, 1fr); row-gap: 14px; max-width: 300px; }
 .cdot { width: 34px; height: 34px; }
+/* con el color rojo, los montos negativos van en naranjo oscuro para no confundirse con los botones */
+:root[data-accent="rojo"], :root[data-theme="light"][data-accent="rojo"] { --neg: #c2410c; }
+:root[data-theme="dark"][data-accent="rojo"] { --neg: #ffa36b; }
