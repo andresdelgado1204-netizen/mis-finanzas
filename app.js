@@ -490,6 +490,24 @@ function saveBudgetMonth(cat, amount, repeat, deleted = false, fixed) {
   upsert('budgets', { id: 'b:' + cat + ':' + ui.month, category: cat, month: ui.month,
     amount, repeat, fixed, deleted, createdAt: now() });
 }
+// Cambia el nombre de un gasto mensual en todos sus meses y en sus pagos
+function renameBudget(old, name) {
+  const t = now();
+  for (const b of data.budgets.filter(x => x.category === old)) {
+    const nb = Object.assign({}, b, { id: 'b:' + name + ':' + budgetMonth(b), category: name, updatedAt: t });
+    const i = data.budgets.findIndex(x => x.id === nb.id);
+    if (i >= 0) data.budgets[i] = nb; else data.budgets.push(nb);
+    b.deleted = true; b.updatedAt = t;
+  }
+  for (const tx of data.transactions.filter(x => x.category === old && x.budgetMonth)) {
+    tx.category = name; if (tx.expenseName === old) tx.expenseName = name; tx.updatedAt = t;
+  }
+  const g = data.settings.categories.gasto;
+  data.settings = Object.assign({}, data.settings, {
+    categories: { ...data.settings.categories, gasto: g.includes(name) ? g : g.map(c => (c === old ? name : c)).concat(g.includes(old) ? [] : [name]) },
+    updatedAt: t });
+  commit();
+}
 function budgetPaymentId(cat, month) {
   const id = 'budget-pay:' + month + ':' + cat;
   const existing = data.transactions.find(t => t.id === id && !t.deleted);
@@ -1286,7 +1304,10 @@ const views = {
       const fixed = budgetFixed(ab), ownMonth = ab && budgetMonth(ab) === ui.month;
       const mes = monthLabel(ui.month).split(' ')[0];
       return `<div class="budrow">
-        <div class="budhead"><b>${withEmoji(c, '🧾')}</b><span class="muted">${fmt(s)}${b ? ` / ${fmt(b)}` : ''}</span></div>
+        ${ui.renameBud === c ? `<form class="budrename" data-old="${esc(c)}">
+            <input name="name" maxlength="30" value="${esc(c)}" aria-label="Nuevo nombre" required>
+            <button type="button" class="slink" data-action="bud-rename-cancel">Cancelar</button><button class="btn">Guardar</button></form>`
+          : `<div class="budhead"><b>${withEmoji(c, '🧾')} <button type="button" class="editname" data-action="bud-rename" data-cat="${esc(c)}" aria-label="Editar nombre de ${esc(c)}">✏️</button></b><span class="muted">${fmt(s)}${b ? ` / ${fmt(b)}` : ''}</span></div>`}
         ${b ? progress(s, b) : ''}
         <div class="budinput"><label for="bud-${esc(c)}">✏️ Monto de ${mes}${fixed ? '' : ` <span class="vartag">${ownMonth ? 'Variable' : 'Variable · revisa este mes'}</span>`}</label>
           <span class="budctl"><input id="bud-${esc(c)}" type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}">
@@ -1733,6 +1754,11 @@ document.addEventListener('click', e => {
       break;
     }
     case 'new-budget': openBudget(); break;
+    case 'bud-rename':
+      ui.renameBud = el.dataset.cat; render();
+      setTimeout(() => { const i = document.querySelector('.budrename input'); if (i) { i.focus(); i.select(); } }, 30);
+      break;
+    case 'bud-rename-cancel': ui.renameBud = null; render(); break;
     case 'del-budget': {
       const cat = el.dataset.cat;
       ask(`¿Quitar ${cat} de gastos mensuales? Tus movimientos de esta categoría no se borran.`, 'Quitar')
@@ -1992,6 +2018,18 @@ document.addEventListener('submit', e => {
     data.settings.salaryReserves = { emergency, savings };
     data.settings.updatedAt = now();
     commit(); toast('Porcentajes guardados para los próximos sueldos'); return;
+  }
+  if (e.target.classList.contains('budrename')) {
+    e.preventDefault();
+    const old = e.target.dataset.old;
+    let name = e.target.name.value.trim().replace(/\s+/g, ' ');
+    if (!name) return;
+    name = name[0].toUpperCase() + name.slice(1);
+    if (name !== old && budgetCats().some(c => c.toLowerCase() === name.toLowerCase())) { toast(`Ya tienes un gasto mensual llamado ${name}`); return; }
+    if (name !== old) renameBudget(old, name);
+    ui.renameBud = null; render();
+    if (name !== old) toast(`Ahora se llama ${name}`);
+    return;
   }
   if (e.target.id === 'budgetForm') {
     e.preventDefault();
