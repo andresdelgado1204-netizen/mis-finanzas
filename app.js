@@ -432,6 +432,42 @@ function monthlyPayCard() {
   </section>`;
 }
 
+const homePeriod = () => ['dia', 'semana', 'quincena', 'mes'].includes(data.settings.homePeriod)
+  ? data.settings.homePeriod : (isAdmin() ? 'semana' : 'mes');
+
+function homePeriodCard() {
+  const period = homePeriod();
+  if (period === 'semana') return weekCard();
+  if (period === 'mes') return monthlyPayCard();
+  const todayDate = refDay();
+  let from = todayDate, to = todayDate;
+  let title = 'Hoy';
+  if (period === 'quincena') {
+    const d = parseD(todayDate), y = d.getFullYear(), m = d.getMonth();
+    if (d.getDate() <= 15) { from = `${y}-${pad(m + 1)}-01`; to = `${y}-${pad(m + 1)}-15`; }
+    else { from = `${y}-${pad(m + 1)}-16`; to = fmtD(new Date(y, m + 1, 0)); }
+    title = d.getDate() <= 15 ? 'Primera quincena' : 'Segunda quincena';
+  }
+  const txs = live(data.transactions).filter(t => t.date >= from && t.date <= to);
+  const inc = txs.filter(t => t.type === 'ingreso').reduce((s, t) => s + t.amount, 0);
+  const exp = txs.filter(t => t.type === 'gasto').reduce((s, t) => s + t.amount, 0);
+  const reserved = reservedAmounts(txs).total;
+  const left = inc - exp - reserved;
+  const daysLeft = Math.max(1, daysBetween(todayDate, addDays(to, 1)));
+  return `<section class="card week">
+    <div class="summary-head"><h3>${title}</h3><span class="muted">${shortDay(from)}${from === to ? '' : ` – ${shortDay(to)}`}</span></div>
+    <div class="weekgrid">
+      <div><small>Recibiste</small><b class="pos">${fmt(inc)}</b></div>
+      <div><small>Gastaste</small><b class="neg">${fmt(exp)}</b></div>
+      <div><small>Disponible</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
+    </div>
+    ${reserved > 0 ? `<p class="muted">Reservado para emergencia y ahorro: <b>${fmt(reserved)}</b> · descontado del disponible.</p>` : ''}
+    ${inc > 0 ? progress(exp + reserved, inc) : ''}
+    ${inc > 0 && left > 0 && period === 'dia' ? `<p class="muted">Disponible hoy: <b>${fmt(left)}</b></p>` : ''}
+    ${inc > 0 && left > 0 && period === 'quincena' ? `<p class="muted">Puedes gastar unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta fin de quincena.</p>` : ''}
+  </section>`;
+}
+
 function weekCard() {
   const ws = weekStart(refDay()), we = addDays(ws, 6), next = addDays(ws, 7);
   const txs = live(data.transactions).filter(t => t.date >= ws && t.date <= we);
@@ -1276,7 +1312,7 @@ const views = {
         ${funds ? `<div class="hfunds">${funds}</div>` : ''}
       </section>` : '';
 
-    return money + (isAdmin() ? weekCard() : monthlyPayCard()) + spendCard + budCard + goalsCard;
+    return money + homePeriodCard() + spendCard + budCard + goalsCard;
   },
 
   movimientos() {
@@ -1365,6 +1401,9 @@ const views = {
 
       <h4 class="sgroup">Mi dinero</h4>
       <section class="card slist">
+        <label class="srow" for="homePeriodSel"><span>🏠 Período de Inicio</span>
+          <select id="homePeriodSel" class="sselect">${[['dia','Día'],['semana','Semana'],['quincena','Quincena'],['mes','Mes']].map(([v,l]) => `<option value="${v}" ${homePeriod() === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        </label>
         ${moneyRow('efectivo', '💵', 'Efectivo')}
         ${moneyRow('banco', '🏦', 'Banco')}
         <label class="srow" for="startSel"><span>📅 Registro desde</span>
@@ -1921,6 +1960,12 @@ document.addEventListener('change', e => {
   if (el.id === 'currencySel') {
     data.settings = Object.assign({}, data.settings, { currency: el.value, updatedAt: now() });
     commit(); toast(`Moneda: ${el.value} – ${CURRENCY_NAMES[el.value]}`);
+  }
+  if (el.id === 'homePeriodSel') {
+    if (['dia', 'semana', 'quincena', 'mes'].includes(el.value)) {
+      data.settings = Object.assign({}, data.settings, { homePeriod: el.value, updatedAt: now() });
+      commit(); toast('Período de Inicio actualizado');
+    }
   }
   if (el.name === 'repeat' && el.form?.id === 'budgetForm') el.dataset.touched = '1';
   if (el.name === 'category' && el.form?.id === 'txForm') {
