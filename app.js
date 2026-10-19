@@ -305,7 +305,9 @@ function weekStart(s) { const d = parseD(s); d.setDate(d.getDate() - (d.getDay()
 function firstPaydayFrom(s) { const d = parseD(s); d.setDate(d.getDate() + (payday() - d.getDay() + 7) % 7); return fmtD(d); }
 // Día de referencia: hoy, o el primer día de pago si aún no empiezas a registrar
 function refDay() {
-  const start = startMonth() ? startMonth() + '-01' : '';
+  // se puede fijar un día exacto de inicio (settings.startDate); si no, el mes de inicio
+  const sd = /^\d{4}-\d{2}-\d{2}$/.test(data.settings.startDate || '') ? data.settings.startDate : '';
+  const start = sd || (startMonth() ? startMonth() + '-01' : '');
   return today() < start ? firstPaydayFrom(start) : today();
 }
 function paydaysInMonth(m) {
