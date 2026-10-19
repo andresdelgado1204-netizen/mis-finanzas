@@ -824,3 +824,10 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .aadd span { font-weight: 600; }
 .alinks { justify-content: flex-start; gap: 6px; min-height: 48px; margin: 0 -8px; width: calc(100% + 16px); padding-left: 0; }
 .alinks .slink { font-size: .88rem; text-decoration: none; }
+.vartag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: .75rem; font-weight: 600; }
+.hfunds { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.hgoal .hfunds:first-of-type:not(:has(+ *)) { }
+.ftotal { margin-bottom: 4px; }
+.ftotal b { font-size: 1.05rem; }
+.hfunds .fsplit { margin-top: 2px; border: 0; padding: 0; }
+.reserves .ftotal { margin: 10px 0 12px; }

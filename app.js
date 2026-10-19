@@ -224,17 +224,21 @@ function reserveRates() {
   const savings = Math.max(0, Math.min(100 - emergency, Number(raw.savings) || 0));
   return { emergency, savings };
 }
+// Montos a ahorrar redondeados: a miles en pesos (38.066 → 38.000), a enteros en otras monedas
+function roundSave(v) {
+  const step = ['CLP', 'COP', 'ARS'].includes(data.settings.currency) ? 1000 : 1;
+  return Math.round((Number(v) || 0) / step) * step;
+}
 function salaryReserves(amount, rates) {
-  const scale = data.settings.currency === 'CLP' ? 1 : 100;
-  const emergency = Math.floor(amount * rates.emergency / 100 * scale) / scale;
-  const savings = Math.floor(amount * rates.savings / 100 * scale) / scale;
+  const emergency = roundSave(amount * rates.emergency / 100);
+  const savings = roundSave(amount * rates.savings / 100);
   return { emergency, savings, rates: { ...rates } };
 }
 function reservedAmounts(txs = live(data.transactions)) {
   return txs.reduce((out, t) => {
     if (t.type === 'ingreso' && t.category === 'Sueldo' && t.reserves) {
-      out.emergency += Number(t.reserves.emergency) || 0;
-      out.savings += Number(t.reserves.savings) || 0;
+      out.emergency += roundSave(t.reserves.emergency);
+      out.savings += roundSave(t.reserves.savings);
     }
     out.total = out.emergency + out.savings;
     return out;
@@ -260,6 +264,7 @@ function reservesCard() {
   const period = isAdmin() ? 'semanal' : 'mensual';
   return `<section class="card reserves"><h3>Separa parte de tu sueldo</h3>
     <p class="muted">Un porcentaje de cada sueldo ${period} va a tus fondos.</p>
+    <div class="kv ftotal"><span>💰 Total a ahorrar</span><b>${fmt(saved.total)}</b></div>
     <div class="reserve-grid">
       <div><span>🛟 Fondo de emergencia</span><b>${fmt(saved.emergency)}</b></div>
       <div><span>🌱 Ahorro</span><b>${fmt(saved.savings)}</b></div>
@@ -450,6 +455,8 @@ function defaultBudgetRepeat(category) {
 }
 function budgetMonth(b) { return b.month || startMonth() || thisMonth(); }
 function budgetRepeats(b) { return typeof b.repeat === 'boolean' ? b.repeat : defaultBudgetRepeat(b.category || ''); }
+// Monto fijo: el mismo monto todos los meses. Variable: se repite, pero conviene revisar el monto cada mes
+function budgetFixed(b) { return b ? (typeof b.fixed === 'boolean' ? b.fixed : budgetRepeats(b)) : false; }
 function activeBudget(cat, month = ui.month) {
   const candidates = data.budgets.filter(b => b.category === cat && budgetMonth(b) <= month);
   candidates.sort((a, b) => budgetMonth(b).localeCompare(budgetMonth(a)) || (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -460,9 +467,10 @@ function budgetCats() {
   return [...new Set(data.budgets.map(b => b.category).filter(c => c && c !== 'Gastos ocasionales'))].filter(c => activeBudget(c));
 }
 function budgetFor(cat, month = ui.month) { return activeBudget(cat, month)?.amount || 0; }
-function saveBudgetMonth(cat, amount, repeat, deleted = false) {
+function saveBudgetMonth(cat, amount, repeat, deleted = false, fixed) {
+  if (typeof fixed !== 'boolean') fixed = budgetFixed(activeBudget(cat));
   upsert('budgets', { id: 'b:' + cat + ':' + ui.month, category: cat, month: ui.month,
-    amount, repeat, deleted, createdAt: now() });
+    amount, repeat, fixed, deleted, createdAt: now() });
 }
 function budgetPaymentId(cat, month) {
   const id = 'budget-pay:' + month + ':' + cat;
@@ -1214,11 +1222,12 @@ const views = {
 
     // 5. La meta que elijas (o la primera) + tus fondos en una línea
     const homeGoal = goals.find(g => g.id === data.settings.homeGoal) || goals[0];
-    const funds = [res.emergency > 0 ? `🛟 Emergencia ${fmt(res.emergency)}` : '', res.savings > 0 ? `🌱 Ahorro ${fmt(res.savings)}` : ''].filter(Boolean).join(' · ');
+    const funds = res.total > 0 ? `<div class="kv ftotal"><span>💰 Total a ahorrar</span><b>${fmt(res.total)}</b></div>
+        <p class="mnote fsplit">${[res.emergency > 0 ? `🛟 Emergencia ${fmt(res.emergency)}` : '', res.savings > 0 ? `🌱 Ahorro ${fmt(res.savings)}` : ''].filter(Boolean).join(' · ')}</p>` : '';
     const goalsCard = homeGoal || funds ? `<section class="card hgoal">
         <div class="summary-head"><h3>${homeGoal ? (homeGoal.kind === 'deuda' ? 'Mi deuda' : 'Mi meta') : 'Mis fondos'}</h3><a href="#" data-tab="metas">${goals.length > 1 ? 'Cambiar' : 'Ver todo'}</a></div>
         ${homeGoal ? goalRow(homeGoal, false) : ''}
-        ${funds ? `<p class="mnote">${funds}</p>` : ''}
+        ${funds ? `<div class="hfunds">${funds}</div>` : ''}
       </section>` : '';
 
     return money + (isAdmin() ? weekCard() : monthlyPayCard()) + spendCard + budCard + goalsCard;
@@ -1245,15 +1254,17 @@ const views = {
       <p class="empty" style="padding:24px 12px">Aún no tienes gastos mensuales.<br>Agrega los fijos, como arriendo o supermercado.</p>
       ${addBtn}</section>` + sixMonthsCard();
     const rows = cats.map(c => {
-      const b = budgetFor(c), s = spent[c] || 0;
+      const b = budgetFor(c), s = spent[c] || 0, ab = activeBudget(c);
+      const fixed = budgetFixed(ab), ownMonth = ab && budgetMonth(ab) === ui.month;
+      const mes = monthLabel(ui.month).split(' ')[0];
       return `<div class="budrow">
         <div class="budhead"><b>${withEmoji(c, '🧾')}</b><span class="muted">${fmt(s)}${b ? ` / ${fmt(b)}` : ''}</span></div>
         ${b ? progress(s, b) : ''}
-        <div class="budinput"><label for="bud-${esc(c)}">Monto previsto</label>
+        <div class="budinput"><label for="bud-${esc(c)}">✏️ Monto de ${mes}${fixed ? '' : ` <span class="vartag">${ownMonth ? 'Variable' : 'Variable · revisa este mes'}</span>`}</label>
           <span class="budctl"><input id="bud-${esc(c)}" type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}">
           <button class="iconbtn" data-action="del-budget" data-cat="${esc(c)}" aria-label="Quitar ${esc(c)} de gastos mensuales" title="Quitar de gastos mensuales">✕</button></span></div>
         ${budgetPaidControl(c)}
-        <label class="budget-repeat"><input type="checkbox" data-budget-repeat="${esc(c)}" ${budgetRepeats(activeBudget(c)) ? 'checked' : ''}> Repetir cada mes</label>
+        <label class="budget-repeat"><input type="checkbox" data-budget-repeat="${esc(c)}" ${fixed ? 'checked' : ''}> Monto fijo</label>
       </div>`;
     }).join('');
     return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
@@ -1873,12 +1884,14 @@ document.addEventListener('change', e => {
   }
   if (el.dataset.budgetRepeat !== undefined) {
     const cat = el.dataset.budgetRepeat;
-    saveBudgetMonth(cat, budgetFor(cat), el.checked);
+    saveBudgetMonth(cat, budgetFor(cat), true, false, el.checked);
+    toast(el.checked ? 'Monto fijo: se repite igual cada mes' : 'Monto variable: puedes cambiarlo cada mes');
   }
   if (el.dataset.budget !== undefined) {
     const cat = el.dataset.budget, amount = parseAmount(el.value);
     const old = activeBudget(cat);
-    saveBudgetMonth(cat, amount, old ? budgetRepeats(old) : defaultBudgetRepeat(cat));
+    saveBudgetMonth(cat, amount, old ? budgetRepeats(old) : true);
+    toast(`${cat}: ${fmt(amount)} desde ${monthLabel(ui.month)}`);
   }
   if (el.id === 'importFile' && el.files[0]) {
     el.files[0].text().then(txt => {
@@ -1950,7 +1963,7 @@ document.addEventListener('submit', e => {
       data.settings = Object.assign({}, data.settings, {
         categories: { ...data.settings.categories, gasto: [...data.settings.categories.gasto, cat] }, updatedAt: now() });
     }
-    saveBudgetMonth(cat, parseAmount(f.amount.value), f.repeat.checked);
+    saveBudgetMonth(cat, parseAmount(f.amount.value), true, false, f.repeat.checked);
     $('#budgetDialog').close();
     toast(`${cat} agregado a gastos mensuales`);
     return;
