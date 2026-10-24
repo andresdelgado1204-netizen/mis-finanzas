@@ -14,7 +14,7 @@
   <link rel="icon" href="icon.svg?v=3" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
   <script src="theme.js?v=22"></script>
-  <link rel="stylesheet" href="styles.css?v=58">
+  <link rel="stylesheet" href="styles.css?v=59">
 </head>
 <body>
   <header class="top">
@@ -85,12 +85,15 @@
         <select name="kind">
           <option value="ahorro">Meta de ahorro</option>
           <option value="deuda">Deuda a pagar</option>
+          <option value="compra">Compra planeada</option>
         </select>
       </label>
+      <label id="purchaseCategoryWrap" hidden>¿Qué quieres comprar?<select name="purchaseCategory"><option value="ropa">👕 Ropa</option><option value="zapatos">👟 Zapatos</option><option value="casa">🏠 Para la casa</option><option value="otros" selected>🛍️ Otra compra</option></select></label>
+      <p id="purchaseGoalNotice" class="muted" hidden>Calculamos cuánto necesitarías ahorrar en cada pago semanal. Este plan no aparta dinero ni crea gastos.</p>
       <label>Nombre<input name="name" maxlength="60" required placeholder="Ej. Fondo de emergencia"></label>
-      <label>Monto objetivo / total de la deuda<input name="target" type="number" inputmode="decimal" min="0" step="any" required></label>
-      <label>Llevas ahorrado / pagado<input name="current" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
-      <label>Fecha límite<input name="deadline" type="date"></label>
+      <label><span id="goalTargetLabel">Monto objetivo / total de la deuda</span><input name="target" type="number" inputmode="decimal" min="0" step="any" required></label>
+      <label><span id="goalCurrentLabel">Llevas ahorrado / pagado</span><input name="current" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+      <label><span id="goalDeadlineLabel">Fecha límite</span><input name="deadline" type="date"></label>
       <div class="row-end">
         <button type="button" class="btn ghost danger" id="goalDelete">Eliminar</button>
         <button type="button" class="btn ghost" data-close>Cancelar</button>
@@ -103,6 +106,7 @@
   <dialog id="contribDialog">
     <form id="contribForm" class="form">
       <h3 id="contribTitle">Abonar</h3>
+      <p id="contribPurchaseNotice" class="muted" hidden>Anota cuánto más tienes para esta compra. Solo actualiza el avance del plan; no mueve dinero ni descuenta de tus cuentas.</p>
       <label>Monto<input name="amount" type="number" inputmode="decimal" min="0" step="any" required></label>
       <label>Fecha<input name="date" type="date" required></label>
       <label>Desde la cuenta<select name="account"></select></label>
@@ -269,6 +273,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=15"></script>
-  <script src="app.js?v=71"></script>
+  <script src="app.js?v=72"></script>
 </body>
 </html>

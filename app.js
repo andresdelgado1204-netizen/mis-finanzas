@@ -592,6 +592,40 @@ function spendingPlanCard() {
   </section>`;
 }
 
+/* ---------- compras planeadas ---------- */
+const PURCHASE_CATEGORIES = { ropa: 'Ropa', zapatos: 'Zapatos', casa: 'Para la casa', otros: 'Otra compra' };
+function purchasePlan(g, reference = refDay()) {
+  const missing = Math.max(0, (Number(g.target) || 0) - (Number(g.current) || 0));
+  const hasDate = /^\d{4}-\d{2}-\d{2}$/.test(g.deadline || '');
+  const firstPay = firstPaydayFrom(reference);
+  const pays = hasDate && g.deadline >= firstPay ? Math.floor(daysBetween(firstPay, g.deadline) / 7) + 1 : 0;
+  return { missing, pays, weekly: missing > 0 && pays > 0 ? Math.ceil(missing / pays) : 0, hasDate, expired: hasDate && g.deadline < reference, ready: missing === 0 };
+}
+function purchaseRow(g, full = true) {
+  const plan = purchasePlan(g), category = PURCHASE_CATEGORIES[g.purchaseCategory] || PURCHASE_CATEGORIES.otros;
+  const icon = { ropa: '👕', zapatos: '👟', casa: '🏠', otros: '🛍️' }[g.purchaseCategory] || '🛍️';
+  return `<div class="goal purchase-goal"><div class="budhead"><b>${withEmoji(g.name, icon)}</b><span class="muted">${esc(category)}</span></div>
+    <div class="kv"><span>Precio estimado</span><b>${fmt(g.target)}</b></div><div class="kv"><span>Ya tengo para esta compra</span><b>${fmt(g.current)}</b></div>
+    ${progress(g.current, g.target, 'goalp')}
+    <p class="purchase-left">${plan.ready ? '✓ Alcanzaste el monto que planeaste' : 'Te faltan ' + fmt(plan.missing)}</p>
+    <p class="mnote">${plan.hasDate ? 'Para el ' + esc(fmtDate(g.deadline)) : 'Añade una fecha para calcular cuánto ahorrar por pago.'}</p>
+    ${!plan.ready && plan.hasDate ? `<div class="purchase-weekly">${plan.pays ? `<b>${fmt(plan.weekly)} por ${esc(DAYS[payday()])}</b><span>${plan.pays} ${plan.pays === 1 ? 'pago disponible' : 'pagos disponibles'} hasta tu fecha</span>` : `<b>${plan.expired ? 'La fecha ya pasó' : 'No quedan pagos antes de esa fecha'}</b><span>Faltan ${fmt(plan.missing)}. Ajusta la fecha o el monto.</span>`}</div>` : ''}
+    ${full ? `<div class="row-end"><button type="button" class="btn ghost" data-action="edit-goal" data-id="${esc(g.id)}">Editar compra</button><button type="button" class="btn" data-action="contribute" data-id="${esc(g.id)}">Anotar avance</button></div>` : ''}</div>`;
+}
+function purchasesCard() {
+  const purchases = live(data.goals).filter(g => g.kind === 'compra');
+  const plans = purchases.map(g => purchasePlan(g));
+  const weekly = plans.reduce((sum, p) => sum + p.weekly, 0);
+  const unresolved = plans.filter(p => !p.ready && (!p.hasDate || !p.pays)).length;
+  return `<section class="card purchases"><div class="summary-head"><h3>Quiero comprar</h3><button type="button" class="slink" data-action="new-purchase">+ Agregar compra</button></div>
+    <p class="mnote">Ropa, zapatos o algo para la casa. Planea el monto y la fecha.</p>
+    ${weekly > 0 ? `<div class="purchase-total"><span>Para tus compras con pagos disponibles</span><b>${fmt(weekly)} por ${esc(DAYS[payday()])}</b></div>` : ''}
+    ${unresolved ? `<p class="mnote">${unresolved} ${unresolved === 1 ? 'compra necesita' : 'compras necesitan'} una fecha con pagos disponibles para calcular su ahorro semanal.</p>` : ''}
+    ${purchases.length ? `<div class="purchase-list">${purchases.map(g => purchaseRow(g)).join('')}</div>` : '<p class="muted">Aún no tienes compras planeadas. Agrega, por ejemplo, ropa para diciembre.</p>'}
+    <p class="mnote">Es un plan de ahorro: no aparta dinero ni registra gastos automáticamente. Los pagos se cuentan desde tu fecha de inicio, incluido el de hoy si corresponde.</p>
+  </section>`;
+}
+
 function defaultBudgetRepeat(category) {
   const name = category.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   return /\b(luz|agua|telefono|arriendo|pasajes)\b/.test(name);
@@ -1275,6 +1309,7 @@ function monthsUntil(d) {
   return (y - sy) * 12 + (m - sm) + 1;
 }
 function goalRow(g, full) {
+  if (g.kind === 'compra') return purchaseRow(g, full);
   const isDebt = g.kind === 'deuda';
   const p = g.target > 0 ? Math.min(100, g.current / g.target * 100) : 0;
   const label = isDebt
@@ -1460,8 +1495,8 @@ const views = {
   },
 
   metas() {
-    const goals = live(data.goals);
-    return reservesCard() + `<div class="summary-head section-head"><h3>Metas y deudas</h3><button class="slink" data-action="new-goal">+ Nueva</button></div>
+    const goals = live(data.goals).filter(g => g.kind !== 'compra');
+    return purchasesCard() + reservesCard() + `<div class="summary-head section-head"><h3>Metas y deudas</h3><button class="slink" data-action="new-goal">+ Nueva</button></div>
       ${goals.length ? goals.map((g, i) => {
         const on = (goals.find(x => x.id === data.settings.homeGoal) || goals[0]).id === g.id;
         return `<section class="card">${goalRow(g, true)}<button type="button" class="pinhome ${on ? 'on' : ''}" data-action="home-goal" data-id="${g.id}" aria-pressed="${on}">${on ? '★ Se muestra en Inicio' : '☆ Mostrar en Inicio'}</button></section>`;
@@ -1694,14 +1729,26 @@ function openBudget() {
 }
 
 let editingGoal = null;
-function openGoal(g) {
+function openGoal(g, kind = 'ahorro') {
   editingGoal = g || null;
   const f = $('#goalForm');
   f.reset();
-  $('#goalTitle').textContent = g ? 'Editar' : 'Nueva meta o deuda';
+  f.kind.value = g ? g.kind : kind;
   $('#goalDelete').hidden = !g;
   if (g) { f.kind.value = g.kind; f.name.value = g.name; f.target.value = g.target; f.current.value = g.current; f.deadline.value = g.deadline || ''; }
+  f.purchaseCategory.value = g?.purchaseCategory || 'otros';
+  updateGoalFields();
   $('#goalDialog').showModal();
+}
+function updateGoalFields() {
+  const f = $('#goalForm'), purchase = f.kind.value === 'compra';
+  $('#goalTitle').textContent = purchase ? (editingGoal ? 'Editar compra' : 'Quiero comprar') : (editingGoal ? 'Editar meta o deuda' : 'Nueva meta o deuda');
+  $('#purchaseCategoryWrap').hidden = !purchase;
+  $('#purchaseGoalNotice').hidden = !purchase;
+  $('#goalTargetLabel').textContent = purchase ? '¿Cuánto cuesta aproximadamente?' : 'Monto objetivo / total de la deuda';
+  $('#goalCurrentLabel').textContent = purchase ? '¿Cuánto tienes para esta compra?' : 'Llevas ahorrado / pagado';
+  $('#goalDeadlineLabel').textContent = purchase ? '¿Para cuándo lo quieres?' : 'Fecha límite';
+  f.name.placeholder = purchase ? 'Ej. Ropa de diciembre, zapatos o un mueble' : 'Ej. Fondo de emergencia';
 }
 
 let contribGoal = null;
@@ -1711,7 +1758,13 @@ function openContrib(g) {
   f.reset();
   $('#contribTitle').textContent = (g.kind === 'deuda' ? 'Pago a: ' : 'Abono a: ') + g.name;
   f.date.value = today() < (startMonth() || '') + '-01' ? startMonth() + '-01' : today();
-  f.asTx.checked = true;
+  const purchase = g.kind === 'compra';
+  f.asTx.checked = !purchase;
+  f.asTx.closest('label').hidden = purchase;
+  f.account.closest('label').hidden = purchase;
+  f.date.closest('label').hidden = purchase;
+  $('#contribPurchaseNotice').hidden = !purchase;
+  $('#contribTitle').textContent = purchase ? 'Avance de: ' + g.name : $('#contribTitle').textContent;
   f.account.innerHTML = accOptions(lastAccount());
   $('#contribDialog').showModal();
 }
@@ -1922,6 +1975,7 @@ document.addEventListener('click', e => {
       break;
     }
     case 'edit-acc': openAcc(data.accounts.find(a => a.id === id)); break;
+    case 'new-purchase': openGoal(null, 'compra'); break;
     case 'new-goal': openGoal(); break;
     case 'edit-goal': openGoal(data.goals.find(g => g.id === id)); break;
     case 'contribute': openContrib(data.goals.find(g => g.id === id)); break;
@@ -2036,11 +2090,13 @@ $('#accDelete').addEventListener('click', () => {
 $('#goalForm').addEventListener('submit', e => {
   e.preventDefault();
   const f = e.target;
+  if (!f.name.value.trim() || !(parseAmount(f.target.value) > 0)) { toast('Escribe el nombre y un monto mayor a 0'); return; }
   const id = editingGoal?.id || uid();
   // una meta nueva pasa a mostrarse en Inicio
   if (!editingGoal) data.settings = Object.assign({}, data.settings, { homeGoal: id, updatedAt: now() });
   upsert('goals', {
     id, kind: f.kind.value, name: f.name.value.trim(),
+    ...(f.kind.value === 'compra' ? { purchaseCategory: Object.hasOwn(PURCHASE_CATEGORIES, f.purchaseCategory.value) ? f.purchaseCategory.value : 'otros' } : {}),
     target: parseAmount(f.target.value), current: parseAmount(f.current.value), deadline: f.deadline.value || '',
   });
   $('#goalDialog').close();
@@ -2058,7 +2114,7 @@ $('#contribForm').addEventListener('submit', e => {
   const amount = parseAmount(f.amount.value);
   if (!amount || !contribGoal) return;
   const isDebt = contribGoal.kind === 'deuda';
-  if (f.asTx.checked) {
+  if (f.asTx.checked && contribGoal.kind !== 'compra') {
     const cat = isDebt ? 'Pago de deudas' : 'Ahorro';
     if (!data.settings.categories.gasto.includes(cat)) {
       data.settings.categories.gasto.push(cat); data.settings.updatedAt = now();
@@ -2068,7 +2124,7 @@ $('#contribForm').addEventListener('submit', e => {
   }
   upsert('goals', Object.assign({}, contribGoal, { current: (contribGoal.current || 0) + amount }));
   $('#contribDialog').close();
-  toast(isDebt ? 'Pago registrado' : 'Abono registrado');
+  toast(contribGoal.kind === 'compra' ? 'Avance actualizado' : isDebt ? 'Pago registrado' : 'Abono registrado');
 });
 
 document.addEventListener('input', e => {
@@ -2079,6 +2135,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.name === 'kind' && el.form?.id === 'goalForm') updateGoalFields();
   if (el.id === 'currencySel') {
     data.settings = Object.assign({}, data.settings, { currency: el.value, updatedAt: now() });
     commit(); toast(`Moneda: ${el.value} – ${CURRENCY_NAMES[el.value]}`);
