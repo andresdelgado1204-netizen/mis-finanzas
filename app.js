@@ -548,22 +548,34 @@ function spendingPlan() {
   // Las cuentas mensuales ya están reservadas en money.free. Solo se aparta
   // el resto del límite de casa, evitando descontar esas cuentas dos veces.
   const extraHouse = remaining.casa === null ? null : Math.max(0, remaining.casa - money.pendingTotal);
-  const ready = remaining.casa !== null && remaining.comida !== null;
-  const pool = ready ? Math.max(0, money.free - extraHouse - remaining.comida) : null;
+  const ready = remaining.ocio !== null || (remaining.casa !== null && remaining.comida !== null);
+  const pool = ready ? Math.max(0, money.free - (extraHouse || 0) - (remaining.comida || 0)) : null;
   const daysInMonth = Math.max(1, daysBetween(range.date, addDays(monthEnd, 1)));
   const weekEnd = range.to < monthEnd ? range.to : monthEnd;
-  const daysThisWeek = Math.max(1, daysBetween(range.date, addDays(weekEnd, 1)));
-  const paced = pool === null ? null : Math.floor(pool * daysThisWeek / daysInMonth);
-  const suggested = paced === null ? null : Math.min(paced, remaining.ocio === null ? paced : remaining.ocio);
+  const daysInMonthThisWeek = Math.max(1, daysBetween(range.date, addDays(weekEnd, 1)));
+  const daysThisWeek = Math.max(1, daysBetween(range.date, addDays(range.to, 1)));
+  const paced = pool === null ? null : Math.floor(pool * daysInMonthThisWeek / daysInMonth);
+  const suggested = pool === null ? null : remaining.ocio === null ? paced : Math.min(pool, remaining.ocio);
+  const daily = suggested === null ? null : Math.floor(suggested / daysThisWeek);
+  const spentToday = sum(weekTxs.filter(t => t.date === range.date), 'ocio');
+  const dailySpending = [];
+  for (let day = range.from; day <= range.to; day = addDays(day, 1)) dailySpending.push({ date: day, amount: sum(weekTxs.filter(t => t.date === day), 'ocio'), future: day > range.date });
   const foodDays = new Set(monthTxs.filter(t => spendingGroup(t) === 'comida').map(t => t.date)).size;
-  return { range, limits, money, spent, remaining, extraHouse, ready, suggested, daysThisWeek, foodDays, unclassified: monthTxs.filter(t => spendingGroup(t) === 'otros').length };
+  return { range, limits, money, spent, remaining, extraHouse, ready, suggested, daily, spentToday, dailySpending, daysThisWeek, foodDays, unclassified: monthTxs.filter(t => spendingGroup(t) === 'otros').length };
 }
 function spendingPlanCard() {
   const p = spendingPlan();
   const names = { casa: ['🏠 Casa', 'Al mes'], ocio: ['🎉 Ocio', 'Por semana · viernes a jueves'], comida: ['🍽️ Comida en la calle', 'Para una salida al mes'] };
   return `<section class="card spending-plan" id="mis-limites"><div class="summary-head"><h3>Mis límites</h3><span class="muted">${esc(monthLabel(ui.month, true))}</span></div>
-    <div class="spending-suggestion"><span>Para ocio de aquí al ${esc(shortDay(p.range.to))}</span><b>${p.suggested === null ? 'Por configurar' : fmt(p.suggested)}</b>
-    <p class="mnote">${p.ready ? `Sugerencia para los ${p.daysThisWeek} días que quedan de esta semana en el mes, sin contar pagos futuros. Protege lo pendiente de casa, comida y ahorro.` : 'Define los límites de casa y comida para calcular una sugerencia semanal. Puedes poner 0 si no quieres reservar para alguno.'}</p></div>
+    <div class="spending-suggestion"><span>Mi ocio semanal · ${esc(shortDay(p.range.from))} – ${esc(shortDay(p.range.to))}</span><b>${p.remaining.ocio === null ? 'Límite sin definir' : fmt(p.remaining.ocio) + ' restantes'}</b>
+    <div class="kv"><span>Gastaste hoy</span><b>${fmt(p.spentToday)}</b></div>
+    <div class="kv"><span>Gastaste esta semana</span><b>${fmt(p.spent.ocio)}</b></div>
+    <div class="kv"><span>Sugerido por día desde hoy</span><b>${p.daily === null ? 'Por configurar' : fmt(p.daily)}</b></div>
+    ${p.remaining.ocio !== null && p.remaining.ocio === 0 ? `<p class="neg">${p.spent.ocio > p.limits.ocio ? 'Superaste tu límite semanal por ' + fmt(p.spent.ocio - p.limits.ocio) + '.' : 'Alcanzaste tu límite semanal.'} No queda presupuesto de ocio.</p>` : ''}
+    <p class="mnote">${p.ready ? `Repartido entre los ${p.daysThisWeek} días que quedan hasta el ${esc(shortDay(p.range.to))}, incluido hoy. Solo usa dinero recibido y respeta las reservas que hayas definido.` : 'Define tu límite semanal de ocio para ver cuánto te queda y cuánto puedes gastar por día. Casa y comida son opcionales.'}</p>
+    ${p.suggested !== null && p.remaining.ocio !== null && p.suggested < p.remaining.ocio ? `<p class="mnote">Aunque queda límite, tu dinero disponible después de las reservas permite usar ${fmt(p.suggested)} esta semana.</p>` : ''}
+    <button type="button" class="btn wide" data-action="weekly-expense">+ Anotar gasto de la semana</button></div>
+    <details class="spending-config"><summary>Ver gasto por día</summary><ul class="spending-days">${p.dailySpending.map(d => `<li><span>${esc(shortDay(d.date))}${d.date === p.range.date ? ' · hoy' : ''}</span><b>${d.future ? 'Pendiente' : fmt(d.amount)}</b></li>`).join('')}</ul></details>
     <div class="spending-groups">${Object.entries(names).map(([key, [name, period]]) => `<div class="spending-group"><div class="summary-head"><b>${name}</b><span class="muted">${period}</span></div>
       <div class="kv"><span>Gastado</span><b>${fmt(p.spent[key])}${p.limits[key] === null ? '' : ` <small>de ${fmt(p.limits[key])}</small>`}</b></div>
       ${p.limits[key] === null ? '<p class="mnote">Límite sin definir</p>' : `<div class="kv"><span>${p.spent[key] > p.limits[key] ? 'Superaste el límite por' : 'Queda de tu límite'}</span><b class="${p.spent[key] > p.limits[key] ? 'neg' : ''}">${fmt(Math.abs(p.limits[key] - p.spent[key]))}</b></div>${p.limits[key] > 0 ? progress(p.spent[key], p.limits[key]) : ''}`}
@@ -1752,6 +1764,9 @@ document.addEventListener('click', e => {
   if (!el) return;
   const id = el.dataset.id;
   switch (el.dataset.action) {
+    case 'weekly-expense':
+      openTx(); $('#txForm').spendingGroup.value = 'ocio'; $('#txForm').date.value = homePeriodRange('semana').date;
+      $('#txTitle').textContent = 'Gasto de la semana'; $('#txForm').newCategory.placeholder = 'Ej. Café o una salida'; break;
     case 'show-limits': $('#mis-limites')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
     case 'home-period':
       if (['dia', 'semana', 'quincena', 'mes'].includes(el.dataset.v)) { data.settings = { ...data.settings, homePeriod: el.dataset.v, updatedAt: now() }; commit(); }
