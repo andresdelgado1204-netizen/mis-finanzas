@@ -626,6 +626,71 @@ function purchasesCard() {
   </section>`;
 }
 
+/* ---------- reinicio personal recuperable ---------- */
+const RESET_FINANCIAL_FIELDS = ['startMonth', 'startDate', 'homeGoal', 'guideHidden', 'spendingLimits', 'salaryReserves', 'reserveCats', 'noReserveCats', 'categories', 'inicioOctubre', 'personalResetAt'];
+function nextFinancialStamp(d) {
+  let stamp = Math.max(now(), (d.settings.updatedAt || 0) + 1);
+  for (const list of ['transactions', 'budgets', 'goals', 'accounts']) for (const item of d[list]) stamp = Math.max(stamp, (item.updatedAt || 0) + 1);
+  return stamp;
+}
+function financialSnapshot(d) {
+  const settings = {};
+  for (const key of RESET_FINANCIAL_FIELDS) if (Object.hasOwn(d.settings, key)) settings[key] = clone(d.settings[key]);
+  return { version: 1, settings, transactions: clone(d.transactions), budgets: clone(d.budgets), goals: clone(d.goals), accounts: clone(d.accounts) };
+}
+function resetFinancialState(source, stamp, month = '2026-11') {
+  const d = clone(source);
+  for (const list of ['transactions', 'budgets', 'goals']) d[list] = d[list].map(x => ({ id: x.id, deleted: true, updatedAt: stamp }));
+  d.accounts = d.accounts.map(a => a.deleted ? { id: a.id, deleted: true, updatedAt: stamp } : { ...a, initial: 0, updatedAt: stamp });
+  if (!live(d.accounts).length) d.accounts = clone(DEFAULT_ACCOUNTS).map(a => ({ ...a, initial: 0, updatedAt: stamp }));
+  d.settings = { ...d.settings, startMonth: month, startDate: month + '-01', inicioOctubre: true, personalResetAt: stamp, homeGoal: '', guideHidden: '', spendingLimits: { casa: null, ocio: null, comida: null }, categories: clone(DEFAULT_CATS), reserveCats: [], noReserveCats: [], updatedAt: stamp };
+  return d;
+}
+function restoreFinancialState(source, snapshot, stamp) {
+  const d = clone(source);
+  for (const list of ['transactions', 'budgets', 'goals', 'accounts']) {
+    const ids = new Set(snapshot[list].map(x => x.id));
+    d[list] = d[list].filter(x => !ids.has(x.id)).map(x => ({ id: x.id, deleted: true, updatedAt: stamp }))
+      .concat(snapshot[list].map(x => ({ ...clone(x), updatedAt: stamp })));
+  }
+  for (const key of RESET_FINANCIAL_FIELDS) { delete d.settings[key]; if (Object.hasOwn(snapshot.settings, key)) d.settings[key] = clone(snapshot.settings[key]); }
+  d.settings.updatedAt = stamp;
+  return d;
+}
+const resetOwner = () => cloud.user?.uid || (window.PREVIEW ? 'preview' : '');
+const resetBackupKey = () => 'finanzas.reinicios.' + resetOwner();
+function resetBackups() { const saved = readJSON(resetBackupKey()); return Array.isArray(saved) ? saved.filter(b => b.owner === resetOwner() && b.data && b.id) : []; }
+function resetReady() { return !!window.PREVIEW || (!!cloud.user && !ui.viewing && navigator.onLine && cloud.status === 'activo' && cloud.server.size === LISTS.length + 1 && !cloud.writing && cloud.state === 'ok'); }
+function restartCard() {
+  const backups = resetBackups();
+  return `<section class="card restart-card"><h3>Empezar de cero</h3><p class="muted">Solo tu cuenta: movimientos, saldos, presupuestos, límites y metas. Conserva tu acceso, tus cuentas y el diseño.</p>
+    <button type="button" class="btn ghost danger wide" data-action="reset-finances">Empezar de cero en noviembre de 2026</button>
+    <p class="mnote">Antes de reiniciar se guarda un respaldo recuperable en este navegador. Descárgalo si también quieres conservarlo fuera de este equipo.</p>
+    ${backups.length ? `<details class="restart-backups"><summary>Respaldos de reinicios (${backups.length})</summary>${backups.map(b => `<div class="restart-backup"><p class="mnote">Antes del reinicio del ${esc(new Date(b.savedAt).toLocaleString('es-CL'))}</p><div class="row-end"><button type="button" class="btn ghost" data-action="restore-finances" data-id="${esc(b.id)}">Restaurar este respaldo</button><button type="button" class="btn ghost" data-action="export-reset-backup" data-id="${esc(b.id)}">Descargar respaldo</button></div></div>`).join('')}</details>` : ''}</section>`;
+}
+async function resetMyFinances() {
+  if (!resetReady()) { toast('Espera a que termine la sincronización y revisa tu conexión'); return; }
+  const owner = resetOwner();
+  const ok = await ask('Se reiniciarán solo tus movimientos, saldos, presupuestos, límites y metas para comenzar el 1 de noviembre de 2026. Se guardará un respaldo que puedes restaurar desde Ajustes en este equipo. Tu acceso y diseño se conservan. ¿Reiniciar tu cuenta?', 'Reiniciar mis datos');
+  if (!ok || owner !== resetOwner()) return;
+  if (!resetReady()) { toast('Espera a que termine la sincronización antes de reiniciar'); return; }
+  const stamp = nextFinancialStamp(data), backup = { id: String(stamp), owner, savedAt: stamp, data: financialSnapshot(data) };
+  try { localStorage.setItem(resetBackupKey(), JSON.stringify([backup, ...resetBackups()])); }
+  catch { toast('No se pudo guardar el respaldo. No se reinició ningún dato.'); return; }
+  data = resetFinancialState(data, stamp);
+  ui.month = '2026-11'; ui.tab = 'inicio'; ui.filter = 'todos'; ui.viewing = null;
+  commit(); window.scrollTo(0, 0); toast('Tu cuenta empieza de cero en noviembre. Respaldo disponible en Ajustes.');
+}
+async function restoreMyFinances(id) {
+  const backup = resetBackups().find(b => b.id === id), owner = resetOwner();
+  if (!backup || !resetReady()) { toast('Espera la sincronización y usa un respaldo de tu propia cuenta'); return; }
+  const ok = await ask('Se reemplazarán tus datos financieros actuales por este respaldo. Tu acceso y diseño se conservan. ¿Restaurar?', 'Restaurar respaldo');
+  if (!ok || owner !== resetOwner() || !resetReady()) return;
+  data = restoreFinancialState(data, backup.data, nextFinancialStamp(data));
+  ui.month = data.settings.startMonth || thisMonth(); ui.tab = 'inicio'; ui.filter = 'todos';
+  commit(); window.scrollTo(0, 0); toast('Respaldo restaurado');
+}
+
 function defaultBudgetRepeat(category) {
   const name = category.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   return /\b(luz|agua|telefono|arriendo|pasajes)\b/.test(name);
@@ -1573,6 +1638,7 @@ const views = {
       </section>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <p class="snote">${live(data.transactions).length} movimientos · ${live(data.goals).length} metas guardadas</p>
+      ${restartCard()}
 
       ${window.PREVIEW ? '' : `<section class="card slist slogout">
         <button type="button" class="srow danger" data-action="logout">Cerrar sesión</button>
@@ -1582,6 +1648,7 @@ const views = {
 };
 
 function render() {
+  if (startMonth() && ui.month < startMonth()) ui.month = startMonth();
   applyAccent();
   restoreLock();
   renderBrand();
@@ -1817,6 +1884,9 @@ document.addEventListener('click', e => {
   if (!el) return;
   const id = el.dataset.id;
   switch (el.dataset.action) {
+    case 'reset-finances': resetMyFinances(); break;
+    case 'restore-finances': restoreMyFinances(id); break;
+    case 'export-reset-backup': { const b = resetBackups().find(x => x.id === id); if (b) download('finanzas-antes-del-reinicio-' + b.id + '.json', JSON.stringify(b.data, null, 1), 'application/json'); break; }
     case 'weekly-expense':
       openTx(); $('#txForm').spendingGroup.value = 'ocio'; $('#txForm').date.value = homePeriodRange('semana').date;
       $('#txTitle').textContent = 'Gasto de la semana'; $('#txForm').newCategory.placeholder = 'Ej. Café o una salida'; break;

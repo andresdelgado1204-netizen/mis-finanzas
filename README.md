@@ -71,3 +71,9 @@ La tarjeta semanal muestra el límite restante, lo gastado hoy, el total semanal
 Metas permite planear compras de Ropa, Zapatos, Para la casa u Otra compra con nombre, precio estimado, avance y fecha. Calcula el faltante y lo reparte entre los días de pago semanales disponibles desde la fecha de referencia hasta la fecha objetivo, ambos inclusive. Muestra el total por pago para las compras con fechas alcanzables; las que no tienen fecha o pagos disponibles se indican aparte. No inventa precios ni fechas.
 
 «Anotar avance» solo actualiza el seguimiento de una compra; no crea movimientos, no reserva dinero y no modifica los saldos. Las metas de ahorro y deudas conservan sus controles. Las compras se pueden editar; una compra nueva pasa a mostrarse en Inicio como meta principal.
+
+### Pantallas y reinicio personal
+
+La interfaz usa una columna en teléfonos y dos columnas en Inicio desde 768 px. Las compras y presupuestos se distribuyen en columnas en tablet y computador, con controles táctiles, formularios desplazables y tamaños que evitan el zoom al escribir en teléfonos. Mantiene los colores y la navegación existente.
+
+En Ajustes, «Empezar de cero en noviembre de 2026» reinicia únicamente la cuenta autenticada después de confirmar. Requiere sincronización terminada. Antes de cambiar datos guarda un respaldo financiero local asociado al usuario; si falla su guardado, no reinicia. Los respaldos se restauran o descargan desde Ajustes en el mismo navegador. No se borran perfiles, credenciales ni preferencias visuales, y no se modifican otras cuentas. Se conservan los nombres de cuentas con saldo inicial 0; se anulan movimientos, presupuestos y metas con marcas de borrado sincronizadas, se vacían límites y se fija el inicio en 2026-11-01. Restaurar reemplaza los datos financieros y conserva el diseño actual.
