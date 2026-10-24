@@ -1280,7 +1280,12 @@ const views = {
         <div class="mtotal ${total < 0 ? 'neg' : ''}">${fmt(total)}</div>
         ${res.total > 0 ? `<p class="mnote">Disponible ${fmt(total - res.total)} · reservado ${fmt(res.total)}</p>` : ''}
         <div class="accpills">${accs.map(a => `<button type="button" class="accpill" data-action="edit-acc" data-id="${a.id}">${accIcon(a)} ${esc(a.name)} <b class="${(accBal[a.id] || 0) < 0 ? 'neg' : ''}">${fmt(accBal[a.id] || 0)}</b></button>`).join('')}</div>
-        <div class="mactions">${actions}</div>
+        <div class="qacts">
+          <button type="button" class="qact" data-action="new-tx"><span aria-hidden="true">−</span>Gasto</button>
+          <button type="button" class="qact" data-action="new-income"><span aria-hidden="true">+</span>Ingreso</button>
+          ${accs.length >= 2 ? '<button type="button" class="qact" data-action="new-transfer"><span aria-hidden="true">⇄</span>Mover</button>' : ''}
+        </div>
+        <div class="mactions">${actions.replace('<button class="slink" data-action="new-transfer">⇄ Mover</button>', '')}</div>
       </section>`;
 
     // 3. En qué gastas: una barra delgada y la lista corta
@@ -1312,7 +1317,7 @@ const views = {
         ${funds ? `<div class="hfunds">${funds}</div>` : ''}
       </section>` : '';
 
-    return money + homePeriodCard() + spendCard + budCard + goalsCard;
+    return `<div class="homegrid">${money}<div class="hcol">${homePeriodCard()}${budCard}${goalsCard}</div><div class="hcol">${spendCard}</div></div>`;
   },
 
   movimientos() {
@@ -1325,7 +1330,9 @@ const views = {
       `<button class="${ui.filter === f ? 'on' : ''}" data-action="filter" data-v="${f}">${{ todos: 'Todos', gasto: 'Gastos', ingreso: 'Ingresos' }[f]}</button>`).join('');
     const list = Object.entries(groups).map(([d, ts]) => `<h4 class="day">${dayLabel(d)}</h4>
       <ul class="txlist">${ts.map(txRow).join('')}</ul>`).join('');
-    return `<div class="seg">${seg}</div>${list || '<p class="empty">No hay movimientos este mes.<br>Toca + para agregar uno.</p>'}`;
+    const all = txOfMonth(ui.month), inc = all.filter(t => t.type === 'ingreso').reduce((s, t) => s + t.amount, 0), out = all.filter(t => t.type === 'gasto').reduce((s, t) => s + t.amount, 0);
+    const sum = `<section class="card txsum"><div><small>Ingresos</small><b class="pos">${fmt(inc)}</b></div><div><small>Gastos</small><b class="neg">${fmt(out)}</b></div><div><small>Balance</small><b class="${inc - out < 0 ? 'neg' : ''}">${fmt(inc - out)}</b></div></section>`;
+    return sum + `<div class="seg">${seg}</div>${list || '<p class="empty">No hay movimientos este mes.<br>Toca + para agregar uno.</p>'}`;
   },
 
   presupuesto() {
@@ -1345,11 +1352,13 @@ const views = {
             <button type="button" class="slink" data-action="bud-rename-cancel">Cancelar</button><button class="btn">Guardar</button></form>`
           : `<div class="budhead"><b>${withEmoji(c, '🧾')} <button type="button" class="editname" data-action="bud-rename" data-cat="${esc(c)}" aria-label="Editar nombre de ${esc(c)}">✏️</button></b><span class="muted">${fmt(s)}${b ? ` / ${fmt(b)}` : ''}</span></div>`}
         ${b ? progress(s, b) : ''}
+        ${budgetPaidControl(c)}
+        <details class="budmore"${fixed ? '' : (ownMonth ? '' : ' open')}><summary>Cambiar monto${fixed ? ' · fijo' : ' · variable'}</summary>
         <div class="budinput"><label for="bud-${esc(c)}">✏️ Monto de ${mes}${fixed ? '' : ` <span class="vartag">${ownMonth ? 'Variable' : 'Variable · revisa este mes'}</span>`}</label>
           <span class="budctl"><input id="bud-${esc(c)}" type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}">
           <button class="iconbtn" data-action="del-budget" data-cat="${esc(c)}" aria-label="Quitar ${esc(c)} de gastos mensuales" title="Quitar de gastos mensuales">✕</button></span></div>
-        ${budgetPaidControl(c)}
         <label class="budget-repeat"><input type="checkbox" data-budget-repeat="${esc(c)}" ${fixed ? 'checked' : ''}> Monto fijo</label>
+        </details>
       </div>`;
     }).join('');
     return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
@@ -1741,6 +1750,7 @@ document.addEventListener('click', e => {
     case 'next-month': ui.month = shiftMonth(ui.month, 1); render(); break;
     case 'filter': ui.filter = el.dataset.v; render(); break;
     case 'new-tx': openTx(); break;
+    case 'new-income': openTx(); setTxType('ingreso'); break;
     case 'edit-name': ui.editName = !ui.editName; render(); if (ui.editName) setTimeout(() => { const i = $('#myName'); if (i) { i.focus(); i.select(); } }, 30); break;
     case 'toggle-pass': ui.passOpen = !ui.passOpen; render(); break;
     case 'home-goal':

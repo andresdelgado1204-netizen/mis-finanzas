@@ -839,3 +839,98 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .budrename .btn { padding: 10px 14px; }
 .budrename { width: 100%; box-sizing: border-box; }
 .budrename { flex-wrap: wrap; justify-content: flex-end; } .budrename input { flex-basis: 100%; }
+
+/* =========================================================
+   Diseño 2026 · v2: Inicio destacado, gastos mensuales
+   compactos y dos columnas en computador.
+   ========================================================= */
+:root { --radius: 20px; --shadow: 0 1px 2px rgba(20,30,50,.05), 0 8px 24px rgba(20,30,50,.06); }
+.card { border-radius: var(--radius); }
+
+/* Mi dinero: tarjeta principal con el color de la cuenta */
+:root .card.mhome {
+  position: relative; overflow: hidden; border: 0 !important; color: #fff;
+  background: linear-gradient(140deg, var(--btn, var(--accent)) 0%, color-mix(in srgb, var(--btn, var(--accent)) 60%, #0b1020) 100%) !important;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--btn, var(--accent)) 30%, transparent);
+  padding: 22px 20px 16px;
+}
+.card.mhome::after { content: ''; position: absolute; right: -60px; top: -60px; width: 200px; height: 200px; border-radius: 50%; background: rgba(255,255,255,.08); pointer-events: none; }
+.mhome .mlabel { color: rgba(255,255,255,.82); }
+.mhome .curchip { background: rgba(255,255,255,.18) !important; color: #fff; }
+.mhome .mtotal { color: #fff; font-size: clamp(2.2rem, 10vw, 2.9rem); font-weight: 800; letter-spacing: -.04em; }
+.mhome .mtotal.neg { color: #ffd7d4; }
+.mhome .mnote { color: rgba(255,255,255,.8); }
+.mhome .accpill { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.18); color: rgba(255,255,255,.85); }
+.mhome .accpill b { color: #fff; }
+.mhome .accpill b.neg { color: #ffd7d4; }
+.qacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; margin-top: 14px; position: relative; z-index: 1; }
+.qact {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 64px; border: 0; border-radius: 16px; background: rgba(255,255,255,.95); color: color-mix(in srgb, var(--btn, var(--accent)) 85%, #000);
+  font-weight: 700; font-size: .85rem; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.qact span { font-size: 1.35rem; line-height: 1; font-weight: 800; }
+.qact:active { transform: scale(.97); }
+.mhome .mactions { position: relative; z-index: 1; margin-top: 6px; }
+.mhome .mactions .slink { color: rgba(255,255,255,.9); }
+.mhome .mactions:empty { display: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .qact { background: rgba(15,20,27,.55); color: #fff; } }
+:root[data-theme="dark"] .qact { background: rgba(15,20,27,.55); color: #fff; }
+/* con los accesos rápidos, el botón flotante sobra en Inicio del teléfono */
+@media (max-width: 999px) { body:has(.homegrid) .fab { display: none; } }
+
+/* Mes: más compacto */
+.monthbar { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 4px; box-shadow: var(--shadow); }
+.monthbar button { border: 0; background: var(--bg); width: 40px; height: 40px; min-width: 40px; min-height: 40px; font-size: 1.2rem; }
+.monthbar b { font-size: 1rem; }
+
+/* Títulos de tarjetas */
+.summary-head h3 { font-size: .95rem; }
+.summary-head a, .summary-head .slink { font-size: .85rem; font-weight: 600; }
+.hbig { font-size: 1.9rem; font-weight: 800; letter-spacing: -.03em; }
+.stackbar { height: 12px; border-radius: 999px; overflow: hidden; gap: 2px; }
+.progress, .bar { border-radius: 999px; }
+
+/* Movimientos: resumen del mes */
+.txsum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 14px; }
+.txsum > div { min-width: 0; text-align: center; padding: 6px 4px; border-radius: 14px; background: var(--bg); }
+.txsum small { display: block; color: var(--muted); font-size: .75rem; font-weight: 600; }
+.txsum b { display: block; font-size: clamp(.85rem, 4vw, 1.1rem); font-weight: 750; overflow-wrap: anywhere; letter-spacing: -.02em; }
+
+/* Gastos mensuales: cada gasto en una tarjeta corta */
+.budget-items { display: grid; gap: 10px; }
+.budget-items .budrow { border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: var(--card); margin: 0; }
+.budget-items .budrow + .budrow { border-top: 1px solid var(--line); }
+.budrow .budhead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.budrow .budhead b { font-size: 1rem; }
+.budrow .budget-paid { margin-top: 10px; }
+.budmore { margin-top: 8px; }
+.budmore > summary { list-style: none; cursor: pointer; color: var(--accent); font-weight: 600; font-size: .85rem; padding: 6px 0; }
+.budmore > summary::-webkit-details-marker { display: none; }
+.budmore > summary::after { content: ' ▾'; }
+.budmore[open] > summary::after { content: ' ▴'; }
+.budmore .budinput { margin-top: 4px; }
+
+/* Formulario: el monto grande, como en las apps de banco */
+#txForm input[name="amount"] { font-size: 2rem; font-weight: 800; text-align: center; letter-spacing: -.02em; min-height: 64px; }
+
+/* Navegación: pestaña activa más clara */
+.tabs button.active { background: var(--accent-soft); color: var(--accent); }
+
+/* Computador: dos columnas */
+@media (min-width: 1000px) {
+  .monthbar, #view { max-width: 1080px; }
+  .monthbar { margin-left: auto; margin-right: auto; }
+  .top { padding-left: max(16px, calc((100% - 1080px) / 2 + 16px)); padding-right: max(16px, calc((100% - 1080px) / 2 + 16px)); }
+  .homegrid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .homegrid > .mhome { grid-column: 1 / -1; margin: 0; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.1fr); column-gap: 28px; align-items: end; }
+  .homegrid > .mhome > .mlabel, .homegrid > .mhome > .mtotal, .homegrid > .mhome > .mnote { grid-column: 1; }
+  .homegrid > .mhome > .accpills { grid-column: 1; }
+  .homegrid > .mhome > .qacts { grid-column: 2; grid-row: 1 / span 4; align-self: center; margin: 0; }
+  .homegrid > .mhome > .mactions { grid-column: 1; }
+  .hcol > .card { margin-bottom: 18px; }
+  .budget-items { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tabs { padding-left: max(16px, calc((100% - 1080px) / 2)); padding-right: max(16px, calc((100% - 1080px) / 2)); }
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .card.mhome { background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 55%, #0b1020) 0%, color-mix(in srgb, var(--accent) 26%, #0b1020) 100%) !important; } }
+:root[data-theme="dark"] .card.mhome { background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 55%, #0b1020) 0%, color-mix(in srgb, var(--accent) 26%, #0b1020) 100%) !important; }
