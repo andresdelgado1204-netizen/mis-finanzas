@@ -1089,3 +1089,44 @@ dialog:not(.ask) .row-end { position:sticky; bottom:0; background:var(--card); p
   .tabs button { flex-direction:row; gap:8px; font-size:.9rem; }
   .tabs button span { font-size:1.2rem; }
 }
+/* Inicio Esencial: un resumen visible y el resto a un toque. */
+.homegrid.essential-home { display:block; max-width:780px; margin:0 auto; }
+.essential-overview { padding:8px 4px 24px; }
+.essential-overview .period-switch { margin:0 0 20px; background:var(--card); }
+.essential-caption, .essential-note { color:var(--muted); font-size:.82rem; line-height:1.6; margin:8px 0; }
+.essential-caption { margin-bottom:24px; }
+.essential-label { font-size:.95rem; font-weight:500; color:var(--muted); margin:0; }
+.essential-amount { font-size:clamp(2.5rem,8vw,4rem); letter-spacing:-.05em; line-height:1.2; font-weight:500; font-variant-numeric:tabular-nums; margin:10px 0; overflow-wrap:anywhere; }
+.essential-week { margin:24px 0; }
+.essential-track { height:5px; background:var(--line); border-radius:5px; overflow:hidden; }
+.essential-track > span { display:block; height:100%; background:var(--accent); }
+.essential-week > div:last-child { display:flex; justify-content:space-between; gap:12px; color:var(--muted); font-size:.78rem; margin-top:8px; }
+.essential-metrics { display:grid; grid-template-columns:1fr 1fr; gap:20px; padding:22px 0; margin-top:24px; border-top:1px solid var(--line); }
+.essential-metrics span { display:block; color:var(--muted); font-size:.82rem; }
+.essential-metrics b { display:block; font-weight:500; font-size:1.2rem; margin-top:5px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.essential-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.essential-actions .btn { min-height:48px; padding:12px 8px; font-size:.9rem; font-weight:500; }
+.essential-actions .btn.ghost { border:1px solid var(--line); color:var(--text); background:var(--card); }
+.essential-warning { padding:14px 16px; border-radius:12px; background:color-mix(in srgb,var(--warn) 13%,var(--card)); color:var(--text); font-size:.88rem; margin:18px 0 0; }
+.essential-fold { border-top:1px solid var(--line); }
+.essential-fold > summary { display:flex; justify-content:space-between; gap:16px; align-items:center; list-style:none; min-height:58px; padding:12px 4px; font-size:.92rem; cursor:pointer; }
+.essential-fold > summary::-webkit-details-marker { display:none; }
+.essential-fold > summary > span { color:var(--muted); }
+.essential-fold[open] > summary > span { transform:rotate(45deg); }
+.essential-fold-content { padding-bottom:16px; }
+.essential-fold-content > .card { box-shadow:none; }
+.essential-shortcuts { margin-top:14px; }
+.essential-shortcuts summary { min-height:44px; padding:10px 0; cursor:pointer; font-size:.85rem; color:var(--muted); }
+.essential-shortcut { display:flex; justify-content:space-between; align-items:center; gap:12px; width:100%; min-height:48px; padding:12px; margin:8px 0; border:1px solid var(--line); border-radius:10px; background:var(--card); text-align:left; font-size:.88rem; }
+.essential-shortcut > span { overflow-wrap:anywhere; }
+.essential-shortcut b { font-weight:500; white-space:nowrap; }
+body:has(.essential-home) .fab { display:none; }
+@media (min-width:768px) {
+  .essential-overview { padding:16px 22px 30px; }
+  .essential-details { padding:0 22px; }
+}
+@media (max-width:359px) {
+  .essential-actions { grid-template-columns:1fr; }
+  .essential-metrics { gap:12px; }
+  .essential-metrics b { font-size:1.05rem; }
+}

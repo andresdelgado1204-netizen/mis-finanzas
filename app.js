@@ -592,6 +592,43 @@ function spendingPlanCard() {
   </section>`;
 }
 
+/* Inicio Esencial: mismas posiciones en los cuatro períodos, detalles plegados. */
+function essentialSummary() {
+  const period = homePeriod(), range = homePeriodRange(period), money = homeAvailable(range), plan = spendingPlan();
+  const limited = plan.limits.ocio !== null && ['dia', 'semana'].includes(period);
+  const amount = limited ? (period === 'dia' ? plan.daily : plan.suggested)
+    : period === 'dia' ? Math.floor(Math.max(0, money.free) / Math.max(1, daysBetween(range.date, range.nextPay))) : money.free;
+  const spentToday = live(data.transactions).filter(t => t.type === 'gasto' && t.date === range.date).reduce((sum, t) => sum + t.amount, 0);
+  const ratio = plan.limits.ocio > 0 ? plan.spent.ocio / plan.limits.ocio : null;
+  return { period, range, money, plan, limited, amount, spentToday, ratio };
+}
+function recentExpenseShortcuts(reference) {
+  const seen = new Set();
+  return live(data.transactions).filter(t => t.type === 'gasto' && !t.budgetMonth && t.date <= reference)
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0))
+    .filter(t => { const key = (t.expenseName || t.category || '').trim().toLocaleLowerCase(); if (!key || seen.has(key)) return false; seen.add(key); return true; }).slice(0, 3);
+}
+function essentialHomeCard() {
+  const { period, range: r, money, plan: p, limited, amount, spentToday, ratio } = essentialSummary();
+  const labels = { dia: limited ? 'Para ocio hoy' : 'Sugerido para hoy', semana: limited ? 'Para ocio esta semana' : 'Dinero libre · esta semana', quincena: 'Dinero libre · esta quincena', mes: 'Dinero libre · este mes' };
+  const caption = r.from === r.to ? shortDay(r.date) : `${shortDay(r.from)} – ${shortDay(r.to)}`;
+  const shortcuts = recentExpenseShortcuts(r.date);
+  return `<section class="essential-overview" aria-label="Resumen esencial">
+    <div class="period-switch" role="group" aria-label="Período de Inicio">${[['dia','Día'],['semana','Semana'],['quincena','Quincena'],['mes','Mes']].map(([v, label]) => `<button type="button" data-action="home-period" data-v="${v}" aria-pressed="${period === v}">${label}</button>`).join('')}</div>
+    <p class="essential-caption">${esc(caption)}</p>
+    <h3 class="essential-label">${labels[period]}</h3><div class="essential-amount ${amount < 0 ? 'neg' : ''}">${fmt(amount)}</div>
+    <p class="essential-note">${limited ? `${period === 'dia' ? 'Sugerencia diaria · ' : ''}Quedan ${fmt(p.remaining.ocio)} de tu límite semanal de ${fmt(p.limits.ocio)}` : 'Dinero recibido, con cuentas y ahorro reservados'}</p>
+    ${limited && p.suggested < p.remaining.ocio ? `<p class="essential-note">Tu dinero después de las reservas permite usar ${fmt(p.suggested)} esta semana.</p>` : ''}
+    ${p.limits.ocio > 0 ? `<div class="essential-week"><div class="essential-track" role="progressbar" aria-label="Límite de ocio semanal utilizado" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(ratio * 100))}" aria-valuetext="${fmt(p.spent.ocio)} gastados de ${fmt(p.limits.ocio)}"><span style="width:${Math.min(100, ratio * 100)}%"></span></div><div><span>Ocio semanal · ${fmt(p.spent.ocio)} gastados</span><span>${Math.round(ratio * 100)}%</span></div></div>` : ''}
+    <div class="essential-metrics"><div><span>${r.date === today() ? 'Gastado hoy' : `Gastado el ${esc(shortDay(r.date))}`}</span><b>${fmt(spentToday)}</b></div><div><span>Próximo pago</span><b>${esc(shortDay(r.nextPay))}</b></div></div>
+    <div class="essential-actions"><button type="button" class="btn" data-action="essential-expense">Anotar gasto</button><button type="button" class="btn ghost" data-action="essential-income">Agregar ingreso</button></div>
+    ${shortcuts.length ? `<details class="essential-shortcuts"><summary>Repetir un gasto reciente</summary><div>${shortcuts.map(t => `<button type="button" class="essential-shortcut" data-action="repeat-expense" data-id="${esc(t.id)}"><span>${esc(t.expenseName || t.category)}</span><b>${fmt(t.amount)} <span aria-hidden="true">＋</span></b></button>`).join('')}</div><p class="essential-note">Revisa el monto y confirma antes de guardar.</p></details>` : ''}
+    ${ratio !== null && ratio >= .8 || p.limits.ocio === 0 && p.spent.ocio > 0 ? `<p class="essential-warning" role="status">${p.remaining.ocio === 0 ? `${p.spent.ocio > p.limits.ocio ? 'Superaste' : 'Alcanzaste'} tu límite semanal de ocio. No queda presupuesto de ocio.` : `Ya usaste el ${Math.round(ratio * 100)}% de tu límite semanal de ocio. Te quedan ${fmt(p.remaining.ocio)}.`}</p>` : ''}
+    ${money.free < 0 ? '<p class="neg">El dinero registrado no alcanza para las reservas. Revisa tus cuentas pendientes.</p>' : ''}
+    ${r.historical ? '<p class="essential-note">Vista histórica al cierre del período.</p>' : r.future || today() < r.date ? '<p class="essential-note">Plan de inicio con el dinero registrado. No incluye ingresos futuros.</p>' : ''}
+  </section>`;
+}
+
 /* ---------- compras planeadas ---------- */
 const PURCHASE_CATEGORIES = { ropa: 'Ropa', zapatos: 'Zapatos', casa: 'Para la casa', otros: 'Otra compra' };
 function purchasePlan(g, reference = refDay()) {
@@ -1509,7 +1546,16 @@ const views = {
         ${funds ? `<div class="hfunds">${funds}</div>` : ''}
       </section>` : '';
 
-    return `<div class="homegrid">${guideCard()}${money}<div class="hcol">${homePeriodCard()}${clarityCard()}${budCard}${goalsCard}</div><div class="hcol">${spendingPlanCard()}${spendCard}</div></div>`;
+    const fold = (title, content, cls = '') => `<details class="essential-fold ${cls}"><summary>${title}<span aria-hidden="true">＋</span></summary><div class="essential-fold-content">${content}</div></details>`;
+    const guide = guideCard();
+    return `<div class="homegrid essential-home">${essentialHomeCard()}<div class="essential-details">
+      ${fold('Mis límites', spendingPlanCard(), 'essential-limits')}
+      ${fold('Mis cuentas', money)}
+      ${fold('Detalle del período', homePeriodCard() + spendCard)}
+      ${fold('Próximas cuentas y gastos mensuales', clarityCard() + budCard)}
+      ${goalsCard ? fold('Mis metas y fondos', goalsCard) : ''}
+      ${guide ? fold('Preparar mi inicio', guide) : ''}
+    </div></div>`;
   },
 
   movimientos() {
@@ -1890,7 +1936,27 @@ document.addEventListener('click', e => {
     case 'weekly-expense':
       openTx(); $('#txForm').spendingGroup.value = 'ocio'; $('#txForm').date.value = homePeriodRange('semana').date;
       $('#txTitle').textContent = 'Gasto de la semana'; $('#txForm').newCategory.placeholder = 'Ej. Café o una salida'; break;
-    case 'show-limits': $('#mis-limites')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+    case 'essential-expense': openTx(); $('#txForm').date.value = homePeriodRange().date; $('#txTitle').textContent = 'Anotar gasto'; break;
+    case 'essential-income': openTx(); setTxType('ingreso'); $('#txForm').date.value = homePeriodRange().date; break;
+    case 'repeat-expense': {
+      const source = recentExpenseShortcuts(homePeriodRange().date).find(t => t.id === id);
+      if (!source) break;
+      openTx();
+      const f = $('#txForm');
+      f.amount.value = source.amount;
+      f.newCategory.value = source.expenseName || source.category;
+      f.spendingGroup.value = spendingGroup(source);
+      if (accounts().some(a => a.id === accId(source))) f.account.value = accId(source);
+      f.date.value = homePeriodRange().date;
+      $('#txTitle').textContent = 'Repetir gasto · revisa y confirma';
+      break;
+    }
+    case 'show-limits': {
+      const target = $('#mis-limites');
+      const fold = target?.closest('details.essential-fold');
+      if (fold) fold.open = true;
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+    }
     case 'home-period':
       if (['dia', 'semana', 'quincena', 'mes'].includes(el.dataset.v)) { data.settings = { ...data.settings, homePeriod: el.dataset.v, updatedAt: now() }; commit(); }
       break;
