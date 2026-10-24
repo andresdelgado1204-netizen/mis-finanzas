@@ -49,3 +49,11 @@ Después ingresa con tu correo y contraseña y, si quieres, activa el bloqueo en
 | `firestore.rules` | Reglas de seguridad de la base de datos (copia de las publicadas) |
 | `sw.js` | Uso sin conexión y actualizaciones |
 | `manifest.webmanifest`, `icon*` | Instalación como app |
+
+### Resumen claro en todos los períodos
+
+Inicio permite cambiar entre Día, Semana (viernes a jueves según tu día de pago), Quincena y Mes sin cambiar el diseño. La elección también se sincroniza con el período de Ajustes.
+
+El dinero libre incluye saldos iniciales e ingresos recibidos hasta la fecha de referencia, menos gastos, ahorro reservado y gastos mensuales pendientes. No suma sueldos futuros. Las cuentas ocultas en «Mi dinero» siguen formando parte del total para no perder dinero al cambiar la preferencia visual. La sugerencia diaria se reparte hasta el final del período; en Día se reparte hasta el próximo pago. Los gastos mensuales pendientes se reservan completos en el cálculo y no se pagan automáticamente.
+
+Cada gasto mensual admite un día de vencimiento opcional (1–31), editable en sus opciones. En meses cortos, el día 29, 30 o 31 se ajusta al último día del mes. Antes de empezar se usa la fecha inicial, incluyendo los días anteriores al primer viernes.

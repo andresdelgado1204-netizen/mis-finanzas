@@ -974,3 +974,26 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .gbtns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 @media (min-width: 1000px) { .homegrid > .guide { grid-column: 1 / -1; margin: 0; } }
 .paylist .payof { display: block; color: var(--muted); font-size: .75rem; }
+
+/* Un mismo resumen para día, semana, quincena y mes. */
+.period-switch { display:flex; gap:4px; background:var(--bg); padding:4px; border-radius:12px; }
+.period-switch button { flex:1; min-width:0; padding:10px 4px; border:0; border-radius:9px; color:var(--muted); background:transparent; font:inherit; font-size:.85rem; cursor:pointer; }
+.period-switch button[aria-pressed="true"] { background:var(--card); color:var(--accent); font-weight:700; box-shadow:var(--shadow); }
+.period-caption { text-align:center; font-size:.82rem; color:var(--muted); margin:12px 0 16px; }
+.period-hero { background:var(--btn, #203c6b); color:#fff; border-radius:18px; padding:22px 20px; }
+.period-hero h3 { color:inherit; font-size:.8rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin:0; }
+.period-free { font-size:clamp(1.8rem, 8vw, 2.8rem); font-weight:700; letter-spacing:-.04em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; margin-top:8px; }
+.period-free.negative { text-decoration:underline; text-underline-offset:6px; }
+.period-hero p { font-size:.78rem; opacity:.9; margin:8px 0 18px; }
+.period-daily { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px; padding-top:15px; border-top:1px solid #ffffff40; font-size:.82rem; }
+.period-daily b { font-size:1rem; font-variant-numeric:tabular-nums; }
+.period-hero .period-next { margin:14px 0 0; }
+.period-math { padding:17px 0; border-bottom:1px solid var(--line); }
+.period-math summary { font-size:.88rem; font-weight:600; cursor:pointer; }
+.period-math .clear-math { margin-top:12px; }
+.period-math .clear-math > div { font-size:.83rem; }
+.period-math .clear-free b { font-size:1.15rem; }
+.period-income { padding-top:18px; }
+.period-income .kv { font-size:.88rem; }
+.budget-due { margin:12px 0; display:grid; gap:6px; font-size:.85rem; color:var(--muted); }
+@media(max-width:380px) { .period-hero { padding:19px 15px; } .period-switch button { font-size:.8rem; } .clear-math b { white-space:normal; overflow-wrap:anywhere; text-align:right; } }

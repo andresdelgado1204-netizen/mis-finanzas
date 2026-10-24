@@ -14,7 +14,7 @@
   <link rel="icon" href="icon.svg?v=3" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
   <script src="theme.js?v=22"></script>
-  <link rel="stylesheet" href="styles.css?v=55">
+  <link rel="stylesheet" href="styles.css?v=56">
 </head>
 <body>
   <header class="top">
@@ -165,6 +165,7 @@
       <h3>Agregar gasto mensual</h3>
       <label>¿Qué gasto es?<input name="newcat" maxlength="30" placeholder="Ej. Arriendo, luz, internet" autocomplete="off" required></label>
       <label>Monto<input name="amount" type="number" inputmode="decimal" min="0" step="any" placeholder="Ej. 150000" required></label>
+      <label>Día de vencimiento (opcional)<input name="dueDay" type="number" min="1" max="31" step="1" inputmode="numeric" placeholder="Ej. 10"></label>
       <label class="check"><input name="repeat" type="checkbox"> Monto fijo <small class="muted">(si varía, déjalo sin marcar y lo editas cada mes)</small></label>
       <div class="row-end">
         <button type="button" class="btn ghost" data-close>Cancelar</button>
@@ -265,6 +266,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=15"></script>
-  <script src="app.js?v=68"></script>
+  <script src="app.js?v=69"></script>
 </body>
 </html>

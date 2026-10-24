@@ -394,7 +394,7 @@ function refDay() {
   // se puede fijar un día exacto de inicio (settings.startDate); si no, el mes de inicio
   const sd = /^\d{4}-\d{2}-\d{2}$/.test(data.settings.startDate || '') ? data.settings.startDate : '';
   const start = sd || (startMonth() ? startMonth() + '-01' : '');
-  return today() < start ? firstPaydayFrom(start) : today();
+  return today() < start ? start : today();
 }
 function paydaysInMonth(m) {
   let d = firstPaydayFrom(m + '-01'), n = 0;
@@ -406,31 +406,6 @@ function lastPay() {
   return live(data.transactions).filter(isPay).sort((a, b) => b.date.localeCompare(a.date))[0];
 }
 function methodOf(t) { return (data.accounts.find(a => a.id === accId(t)) || {}).kind === 'efectivo' ? 'efectivo' : 'transferencia'; }
-
-function monthlyPayCard() {
-  const month = ui.month;
-  const txs = live(data.transactions).filter(t => t.date.startsWith(month));
-  let inc = 0, exp = 0;
-  for (const t of txs) {
-    if (t.type === 'ingreso') inc += t.amount;
-    else if (t.type === 'gasto') exp += t.amount;
-  }
-  const reserved = reservedAmounts(txs).total;
-  const left = inc - exp - reserved;
-  const pays = txs.filter(isPay);
-  const paid = pays.reduce((sum, t) => sum + t.amount, 0);
-  const first = month + '-01';
-  const next = shiftMonth(month, 1) + '-01';
-  const current = today();
-  const date = current >= first && current < next ? current : first;
-  const daysLeft = daysBetween(date, next);
-  return `<section class="card week mweek">
-    <div class="summary-head"><h3>Este mes</h3><span class="mleft ${left < 0 ? 'neg' : ''}">${left < 0 ? 'Te pasaste ' + fmt(-left) : 'Quedan ' + fmt(left)}</span></div>
-    ${inc > 0 ? progress(exp + reserved, inc) : ''}
-    <p class="mnote">Gastaste ${fmt(exp)} de ${fmt(inc)}${inc > 0 && left > 0 && current < next ? ` · unos ${fmt(Math.floor(left / daysLeft))} por día` : ''}</p>
-    ${pays.length ? '' : `<button class="btn wide" data-action="pay-month" data-date="${date}">Registrar pago del mes</button>`}
-  </section>`;
-}
 
 const homePeriod = () => ['dia', 'semana', 'quincena', 'mes'].includes(data.settings.homePeriod)
   ? data.settings.homePeriod : (isAdmin() ? 'semana' : 'mes');
@@ -449,38 +424,52 @@ function deltaTag(now, before, good = 'down') {
   return `<span class="delta ${ok ? 'good' : 'bad'}" title="Frente a ${esc(monthLabel(shiftMonth(ui.month, -1)))}">${up ? '↑' : '↓'} ${Math.abs(p)}%</span>`;
 }
 // lo que falta por gastar/pagar de cada gasto mensual (sin contar dos veces lo que ya gastaste en esa categoría)
-function pendingFixed(month = ui.month) {
-  const spent = spentByCat(month);
-  return budgetCats().filter(c => budgetFor(c, month) > 0 && !budgetPayment(c, month))
-    .map(c => ({ cat: c, amount: Math.max(0, budgetFor(c, month) - (spent[c] || 0)), budget: budgetFor(c, month), spent: spent[c] || 0 }))
-    .filter(x => x.amount > 0);
+function pendingFixed(month = ui.month, asOf = '9999-12-31') {
+  const spent = {};
+  for (const t of txOfMonth(month)) if (t.type === 'gasto' && t.date <= asOf) spent[t.category] = (spent[t.category] || 0) + t.amount;
+  return budgetCats(month).filter(c => budgetFor(c, month) > 0 && !live(data.transactions).some(t => t.type === 'gasto' && t.category === c && t.budgetMonth === month && t.date <= asOf && t.amount > 0))
+    .map(c => ({ cat: c, amount: Math.max(0, budgetFor(c, month) - (spent[c] || 0)), budget: budgetFor(c, month), spent: spent[c] || 0, due: budgetDueDate(activeBudget(c, month), month) }))
+    .filter(x => x.amount > 0).sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.cat.localeCompare(b.cat));
+}
+function budgetDueDate(b, month = ui.month) {
+  const day = Number(b?.dueDay);
+  if (!Number.isInteger(day) || day < 1 || day > 31) return '';
+  const last = Number(addDays(shiftMonth(month, 1) + '-01', -1).slice(-2));
+  return month + '-' + pad(Math.min(day, last));
+}
+function homePeriodRange(period = homePeriod()) {
+  const first = ui.month + '-01', last = addDays(shiftMonth(ui.month, 1) + '-01', -1);
+  const ref = refDay();
+  const date = ref.startsWith(ui.month) ? ref : ui.month < ref.slice(0, 7) ? last : first;
+  let from = date, to = date, title = 'Hoy';
+  if (period === 'semana') { from = weekStart(date); to = addDays(from, 6); title = 'Esta semana'; }
+  if (period === 'quincena') { const second = Number(date.slice(-2)) > 15; from = ui.month + (second ? '-16' : '-01'); to = second ? last : ui.month + '-15'; title = second ? 'Segunda quincena' : 'Primera quincena'; }
+  if (period === 'mes') { from = first; to = last; title = 'Este mes'; }
+  const start = data.settings.startDate || (startMonth() ? startMonth() + '-01' : '');
+  if (start && from < start && start <= to) from = start;
+  return { date, from, to, title, nextPay: addDays(weekStart(date), 7), daysLeft: Math.max(1, daysBetween(date, addDays(to, 1))), historical: ui.month < ref.slice(0, 7), future: ui.month > ref.slice(0, 7) };
+}
+function homeAvailable(range = homePeriodRange()) {
+  const asOf = range.future ? refDay() : range.date;
+  const txs = live(data.transactions).filter(t => t.date <= asOf);
+  const ids = new Set(allAccounts().map(a => a.id));
+  let total = allAccounts().reduce((sum, a) => sum + (a.initial || 0), 0);
+  for (const t of txs) {
+    if (ids.has(accId(t)) && (t.type === 'ingreso' || t.type === 'ajuste')) total += t.amount;
+    if (ids.has(accId(t)) && t.type === 'gasto') total -= t.amount;
+    if (t.type === 'transferencia') { if (ids.has(t.from)) total -= t.amount; if (ids.has(t.to)) total += t.amount; }
+  }
+  const reserved = reservedAmounts(txs.filter(t => ids.has(accId(t)))).total;
+  const pending = pendingFixed(ui.month, asOf), pendingTotal = pending.reduce((sum, p) => sum + p.amount, 0);
+  return { total, reserved, pending, pendingTotal, free: total - reserved - pendingTotal };
 }
 function clarityCard() {
-  const m = ui.month, isNow = m === refDay().slice(0, 7);
-  const payable = budgetCats().filter(c => budgetFor(c) > 0);
-  const pend = pendingFixed(m), pendTotal = pend.reduce((s, x) => s + x.amount, 0);
-  if (!isNow && !payable.length) return '';
-  const accBal = balances(), total = accounts().reduce((s, a) => s + (accBal[a.id] || 0), 0);
-  const reserved = reservedAmounts().total;
-  const free = total - reserved - pendTotal;
-  const end = fmtD(new Date(+m.slice(0, 4), +m.slice(5, 7), 0));
-  const daysLeft = Math.max(1, daysBetween(refDay(), addDays(end, 1)));
-  const paidN = payable.filter(c => budgetPayment(c, m) || (spentByCat(m)[c] || 0) >= budgetFor(c, m)).length;
-  const hasMoney = total !== 0 || live(data.transactions).length > 0;
-  const freeHTML = isNow && hasMoney ? `<div class="clear-math">
-      <div><span>Dinero hoy</span><b>${fmt(total)}</b></div>
-      ${pendTotal > 0 ? `<div><span>− Gastos mensuales por pagar <small>(${pend.length})</small></span><b class="neg">−${fmt(pendTotal)}</b></div>` : ''}
-      ${reserved > 0 ? `<div><span>− Reservado para ahorro</span><b class="neg">−${fmt(reserved)}</b></div>` : ''}
-      <div class="clear-free"><span>Libre de verdad</span><b class="${free < 0 ? 'neg' : 'pos'}">${fmt(free)}</b></div>
-    </div>
-    <p class="muted clear-day">${free > 0 ? `Puedes gastar unos <b>${fmt(Math.floor(free / daysLeft))}</b> por día hasta el ${shortDay(end)} (${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}).` : free < 0 ? '⚠️ Lo que tienes no alcanza para los gastos fijos que faltan. Revisa tus gastos ocio.' : 'Ya no te queda dinero libre este mes.'}</p>` : '';
-  const listHTML = payable.length ? `<div class="pay-head"><b>Por pagar este mes</b><span class="muted">${paidN} de ${payable.length} pagados</span></div>
-    ${pend.length ? `<ul class="paylist">${pend.map(x => `<li><span>${withEmoji(x.cat, '🧾')}${x.spent > 0 ? `<small class="payof">faltan de ${fmt(x.budget)}</small>` : ''}</span><b>${fmt(x.amount)}</b>${x.spent > 0 ? '<button type="button" class="btn small ghost" data-tab="presupuesto">Ver</button>' : `<button type="button" class="btn small" data-action="pay-bud" data-cat="${esc(x.cat)}">Pagar</button>`}</li>`).join('')}</ul>`
-      : '<p class="paydone">✅ Todos tus gastos fijos de este mes están pagados.</p>'}` : (isNow ? '<p class="muted">Agrega tus gastos fijos (arriendo, luz, internet…) para ver cuánto te queda libre de verdad. <button type="button" class="slink" data-action="new-budget">+ Agregar</button></p>' : '');
-  return `<section class="card clear">
-    <div class="summary-head"><h3>${isNow ? 'Tu mes, claro' : 'Gastos fijos de ' + esc(monthLabel(m).split(' ')[0])}</h3></div>
-    ${freeHTML}${listHTML}
-  </section>`;
+  const range = homePeriodRange(), { pending, pendingTotal } = homeAvailable(range);
+  const cats = budgetCats(ui.month).filter(c => budgetFor(c) > 0);
+  return `<section class="card clear"><div class="summary-head"><h3>Próximas cuentas</h3><a href="#" data-tab="presupuesto">Ver todo</a></div>
+    <p class="muted">Pendientes de ${esc(monthLabel(ui.month))} · ${fmt(pendingTotal)}</p>
+    ${pending.length ? `<ul class="paylist">${pending.map(x => `<li><span>${withEmoji(x.cat, '🧾')}<small class="payof">${x.due ? `${x.due < range.date ? 'Vencida' : 'Vence'} ${esc(shortDay(x.due))}` : 'Sin vencimiento definido'}</small></span><b>${fmt(x.amount)}</b><button type="button" class="btn small ghost" data-tab="presupuesto">Ver</button></li>`).join('')}</ul><p class="mnote">Este total ya se descuenta del dinero libre. Es una reserva de planificación; los pagos se registran por separado.</p>` : `<p class="muted">${cats.length ? 'No quedan cuentas pendientes de este mes.' : 'Agrega tus gastos mensuales para reservarlos en el cálculo.'}</p>`}
+    <button type="button" class="slink" data-action="new-budget">+ Agregar gasto mensual</button></section>`;
 }
 function guideCard() {
   const m = ui.month;
@@ -501,70 +490,34 @@ function guideCard() {
   </section>`;
 }
 function homePeriodCard() {
-  const period = homePeriod();
-  if (period === 'semana') return weekCard();
-  if (period === 'mes') return monthlyPayCard();
-  const todayDate = refDay();
-  let from = todayDate, to = todayDate;
-  let title = 'Hoy';
-  if (period === 'quincena') {
-    const d = parseD(todayDate), y = d.getFullYear(), m = d.getMonth();
-    if (d.getDate() <= 15) { from = `${y}-${pad(m + 1)}-01`; to = `${y}-${pad(m + 1)}-15`; }
-    else { from = `${y}-${pad(m + 1)}-16`; to = fmtD(new Date(y, m + 1, 0)); }
-    title = d.getDate() <= 15 ? 'Primera quincena' : 'Segunda quincena';
-  }
-  const txs = live(data.transactions).filter(t => t.date >= from && t.date <= to);
-  const inc = txs.filter(t => t.type === 'ingreso').reduce((s, t) => s + t.amount, 0);
-  const exp = txs.filter(t => t.type === 'gasto').reduce((s, t) => s + t.amount, 0);
-  const reserved = reservedAmounts(txs).total;
-  const left = inc - exp - reserved;
-  const daysLeft = Math.max(1, daysBetween(todayDate, addDays(to, 1)));
-  return `<section class="card week">
-    <div class="summary-head"><h3>${title}</h3><span class="muted">${shortDay(from)}${from === to ? '' : ` – ${shortDay(to)}`}</span></div>
-    <div class="weekgrid">
-      <div><small>Recibiste</small><b class="pos">${fmt(inc)}</b></div>
-      <div><small>Gastaste</small><b class="neg">${fmt(exp)}</b></div>
-      <div><small>Disponible</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
+  const period = homePeriod(), r = homePeriodRange(period), money = homeAvailable(r);
+  const txs = live(data.transactions).filter(t => t.date >= r.from && t.date <= r.to && t.date <= r.date);
+  const inc = txs.filter(t => t.type === 'ingreso').reduce((sum, t) => sum + t.amount, 0);
+  const exp = txs.filter(t => t.type === 'gasto').reduce((sum, t) => sum + t.amount, 0);
+  const suggestedDays = period === 'dia' ? Math.max(1, daysBetween(r.date, r.nextPay)) : r.daysLeft;
+  const daily = Math.floor(Math.max(0, money.free) / suggestedDays);
+  const periodName = { dia: 'de hoy', semana: 'de la semana', quincena: 'de la quincena', mes: 'del mes' }[period];
+  const caption = r.from === r.to ? dayLabel(r.date) : `${shortDay(r.from)} – ${shortDay(r.to)}`;
+  return `<section class="card period-overview">
+    <div class="period-switch" role="group" aria-label="Período de Inicio">${[['dia','Día'],['semana','Semana'],['quincena','Quincena'],['mes','Mes']].map(([v, l]) => `<button type="button" data-action="home-period" data-v="${v}" aria-pressed="${period === v}">${l}</button>`).join('')}</div>
+    <p class="period-caption">${esc(caption)}</p>
+    <div class="period-hero"><h3>Dinero libre · ${esc(r.title.toLowerCase())}</h3><div class="period-free ${money.free < 0 ? 'negative' : ''}">${fmt(money.free)}</div>
+      <p>Cuentas y ahorro reservados · Solo dinero recibido</p>
+      <div class="period-daily"><span>${period === 'dia' ? 'Sugerido para hoy' : `Sugerido por día · ${r.daysLeft} ${r.daysLeft === 1 ? 'día' : 'días'}`}</span><b>${fmt(daily)}${period === 'dia' ? '' : ' / día'}</b></div>
+      <p class="period-next">Próximo pago: ${esc(shortDay(r.nextPay))}${period === 'dia' ? ' · sugerencia repartida hasta ese pago' : ''}</p>
     </div>
-    ${reserved > 0 ? `<p class="muted">Reservado para emergencia y ahorro: <b>${fmt(reserved)}</b> · descontado del disponible.</p>` : ''}
-    ${inc > 0 ? progress(exp + reserved, inc) : ''}
-    ${inc > 0 && left > 0 && period === 'dia' ? `<p class="muted">Disponible hoy: <b>${fmt(left)}</b></p>` : ''}
-    ${inc > 0 && left > 0 && period === 'quincena' ? `<p class="muted">Puedes gastar unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta fin de quincena.</p>` : ''}
-  </section>`;
-}
-
-function weekCard() {
-  const ws = weekStart(refDay()), we = addDays(ws, 6), next = addDays(ws, 7);
-  const txs = live(data.transactions).filter(t => t.date >= ws && t.date <= we);
-  let inc = 0, exp = 0;
-  for (const t of txs) { if (t.type === 'ingreso') inc += t.amount; else if (t.type === 'gasto') exp += t.amount; }
-  const reserved = reservedAmounts(txs).total;
-  const left = inc - exp - reserved;
-  const pay = txs.find(isPay);
-  const t = today();
-  const notYet = t < ws;
-  const daysLeft = Math.max(1, daysBetween(notYet ? ws : t, next));
-  const untilNext = daysBetween(t, notYet ? ws : next);
-  const dayName = DAYS[payday()];
-  const nextLine = notYet
-    ? `Primer pago: ${dayName} ${shortDay(ws).replace(/^\S+\s/, '')} · en ${untilNext} días`
-    : `Próximo pago: ${dayName} ${shortDay(next).replace(/^\S+\s/, '')} · ${untilNext === 1 ? 'mañana' : `en ${untilNext} días`}`;
-  const payLine = pay
-    ? `<p class="payok">✓ Pago registrado: ${fmt(pay.amount)} en ${methodOf(pay) === 'efectivo' ? 'efectivo' : 'transferencia'}</p>`
-    : `<button class="btn wide" data-action="pay-week" data-date="${ws}">Registrar pago del ${dayName}</button>`;
-  const m = ws.slice(0, 7);
-  return `<section class="card week">
-    <div class="weekhead"><h3>Semana de pago</h3><span class="muted">${shortDay(ws)} – ${shortDay(we)}</span></div>
-    <div class="weekgrid">
-      <div><small>Recibiste</small><b class="pos">${fmt(inc)}</b></div>
-      <div><small>Gastaste</small><b class="neg">${fmt(exp)}</b></div>
-      <div><small>Disponible</small><b class="${left >= 0 ? '' : 'neg'}">${fmt(left)}</b></div>
+    ${r.historical ? '<p class="muted">Vista histórica al cierre del período; saldos iniciales incluidos.</p>' : r.future ? '<p class="muted">Plan del mes futuro con el dinero registrado hasta hoy. No incluye sueldos futuros.</p>' : ''}
+    ${money.free < 0 ? '<p class="neg">El dinero registrado no alcanza para todas tus reservas. Revisa tus cuentas pendientes.</p>' : ''}
+    <details class="period-math"><summary>¿Cómo se calcula mi disponible?</summary><div class="clear-math">
+      <div><span>Dinero en todas tus cuentas${r.historical ? ' al cierre' : ''}</span><b>${fmt(money.total)}</b></div>
+      <div><span>Reservado para cuentas del mes</span><b>−${fmt(money.pendingTotal)}</b></div>
+      <div><span>Reservado para ahorro y emergencia</span><b>−${fmt(money.reserved)}</b></div>
+      <div class="clear-free"><span>Dinero libre</span><b>${fmt(money.free)}</b></div></div></details>
+    <div class="period-income"><div class="summary-head"><h3>Ingresos ${periodName}</h3><b>${fmt(inc)}</b></div>
+      <div class="kv"><span>Gastos registrados</span><b>${fmt(exp)}</b></div><div class="kv"><span>Ahorro reservado de estos ingresos</span><b>${fmt(reservedAmounts(txs).total)}</b></div>
+      <p class="mnote">El dinero libre incluye lo que traías de antes y descuenta tus compromisos pendientes.</p>
+      ${!txs.some(isPay) ? '<button type="button" class="btn wide ghost" data-action="new-income">+ Registrar ingreso</button>' : ''}
     </div>
-    ${reserved > 0 ? `<p class="muted">Reservado para emergencia y ahorro: <b>${fmt(reserved)}</b> · descontado del disponible.</p>` : ''}
-    ${inc > 0 ? progress(exp + reserved, inc) : ''}
-    ${inc > 0 && left > 0 ? `<p class="muted">Puedes gastar unos <b>${fmt(Math.floor(left / daysLeft))}</b> por día hasta el próximo pago.</p>` : ''}
-    ${payLine}
-    <p class="muted">${nextLine} · ${monthLabel(m).split(' ')[0]} tiene ${paydaysInMonth(m)} ${dayName.endsWith('s') ? dayName : dayName + 's'} de pago.</p>
   </section>`;
 }
 
@@ -582,14 +535,14 @@ function activeBudget(cat, month = ui.month) {
   const selected = candidates[0];
   return selected && !selected.deleted && (budgetRepeats(selected) || budgetMonth(selected) === month) ? selected : null;
 }
-function budgetCats() {
-  return [...new Set(data.budgets.map(b => b.category).filter(c => c && c !== 'Gastos ocasionales'))].filter(c => activeBudget(c));
+function budgetCats(month = ui.month) {
+  return [...new Set(data.budgets.map(b => b.category).filter(c => c && c !== 'Gastos ocasionales'))].filter(c => activeBudget(c, month));
 }
 function budgetFor(cat, month = ui.month) { return activeBudget(cat, month)?.amount || 0; }
-function saveBudgetMonth(cat, amount, repeat, deleted = false, fixed) {
+function saveBudgetMonth(cat, amount, repeat, deleted = false, fixed, dueDay = activeBudget(cat)?.dueDay || 0) {
   if (typeof fixed !== 'boolean') fixed = budgetFixed(activeBudget(cat));
   upsert('budgets', { id: 'b:' + cat + ':' + ui.month, category: cat, month: ui.month,
-    amount, repeat, fixed, deleted, createdAt: now() });
+    amount, repeat, fixed, dueDay, deleted, createdAt: now() });
 }
 // Cambia el nombre de un gasto mensual en todos sus meses y en sus pagos
 function renameBudget(old, name) {
@@ -1343,7 +1296,7 @@ const views = {
     const money = `<section class="card money mhome">
         <div class="mlabel">Mi dinero <span class="curchip" title="${esc(CURRENCY_NAMES[data.settings.currency] || '')}">${esc(data.settings.currency)}</span></div>
         <div class="mtotal ${total < 0 ? 'neg' : ''}">${fmt(total)}</div>
-        ${res.total > 0 ? `<p class="mnote">Disponible ${fmt(total - res.total)} · reservado ${fmt(res.total)}</p>` : ''}
+        ${res.total > 0 ? `<p class="mnote">Incluye ${fmt(res.total)} reservado para ahorro</p>` : ''}
         <div class="accpills">${accs.map(a => `<button type="button" class="accpill" data-action="edit-acc" data-id="${a.id}">${accIcon(a)} ${esc(a.name)} <b class="${(accBal[a.id] || 0) < 0 ? 'neg' : ''}">${fmt(accBal[a.id] || 0)}</b></button>`).join('')}</div>
         <div class="qacts">
           <button type="button" class="qact" data-action="new-tx"><span aria-hidden="true">−</span>Gasto</button>
@@ -1385,7 +1338,7 @@ const views = {
         ${funds ? `<div class="hfunds">${funds}</div>` : ''}
       </section>` : '';
 
-    return `<div class="homegrid">${guideCard()}${money}<div class="hcol">${clarityCard()}${homePeriodCard()}${budCard}${goalsCard}</div><div class="hcol">${spendCard}</div></div>`;
+    return `<div class="homegrid">${guideCard()}${money}<div class="hcol">${homePeriodCard()}${clarityCard()}${budCard}${goalsCard}</div><div class="hcol">${spendCard}</div></div>`;
   },
 
   movimientos() {
@@ -1426,6 +1379,7 @@ const views = {
         <div class="budinput"><label for="bud-${esc(c)}">✏️ Monto de ${mes}${fixed ? '' : ` <span class="vartag">${ownMonth ? 'Variable' : 'Variable · revisa este mes'}</span>`}</label>
           <span class="budctl"><input id="bud-${esc(c)}" type="number" inputmode="decimal" min="0" step="any" value="${b || ''}" placeholder="Sin límite" data-budget="${esc(c)}">
           <button class="iconbtn" data-action="del-budget" data-cat="${esc(c)}" aria-label="Quitar ${esc(c)} de gastos mensuales" title="Quitar de gastos mensuales">✕</button></span></div>
+        <label class="budget-due">Día de vencimiento (opcional)<input type="number" min="1" max="31" step="1" inputmode="numeric" placeholder="Sin fecha" value="${ab?.dueDay || ''}" data-budget-due="${esc(c)}"></label>
         <label class="budget-repeat"><input type="checkbox" data-budget-repeat="${esc(c)}" ${fixed ? 'checked' : ''}> Monto fijo</label>
         </details>
       </div>`;
@@ -1735,6 +1689,9 @@ document.addEventListener('click', e => {
   if (!el) return;
   const id = el.dataset.id;
   switch (el.dataset.action) {
+    case 'home-period':
+      if (['dia', 'semana', 'quincena', 'mes'].includes(el.dataset.v)) { data.settings = { ...data.settings, homePeriod: el.dataset.v, updatedAt: now() }; commit(); }
+      break;
     case 'sync': toast(cloud.error || (cloud.state === 'ok' ? 'Tus datos están al día en todos tus dispositivos' : 'Sincronizando…')); break;
     case 'auth-toggle': setAuthMode(authMode === 'signup' ? 'login' : 'signup'); break;
     case 'auth-reset': {
@@ -2082,6 +2039,13 @@ document.addEventListener('change', e => {
     saveBudgetMonth(cat, budgetFor(cat), true, false, el.checked);
     toast(el.checked ? 'Monto fijo: se repite igual cada mes' : 'Monto variable: puedes cambiarlo cada mes');
   }
+  if (el.dataset.budgetDue !== undefined) {
+    const dueDay = el.value === '' ? 0 : Number(el.value);
+    if (!Number.isInteger(dueDay) || dueDay < 0 || dueDay > 31 || !el.checkValidity()) { toast('Elige un día del 1 al 31 o deja el campo vacío'); return; }
+    const cat = el.dataset.budgetDue, old = activeBudget(cat);
+    saveBudgetMonth(cat, budgetFor(cat), old ? budgetRepeats(old) : true, false, budgetFixed(old), dueDay);
+    toast(dueDay ? 'Vencimiento actualizado' : 'Vencimiento eliminado');
+  }
   if (el.dataset.budget !== undefined) {
     const cat = el.dataset.budget, amount = parseAmount(el.value);
     const old = activeBudget(cat);
@@ -2170,7 +2134,7 @@ document.addEventListener('submit', e => {
       data.settings = Object.assign({}, data.settings, {
         categories: { ...data.settings.categories, gasto: [...data.settings.categories.gasto, cat] }, updatedAt: now() });
     }
-    saveBudgetMonth(cat, parseAmount(f.amount.value), true, false, f.repeat.checked);
+    saveBudgetMonth(cat, parseAmount(f.amount.value), true, false, f.repeat.checked, Number(f.dueDay.value) || 0);
     $('#budgetDialog').close();
     toast(`${cat} agregado a gastos mensuales`);
     return;
