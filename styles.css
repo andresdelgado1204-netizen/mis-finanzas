@@ -934,3 +934,43 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .card.mhome { background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 55%, #0b1020) 0%, color-mix(in srgb, var(--accent) 26%, #0b1020) 100%) !important; } }
 :root[data-theme="dark"] .card.mhome { background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 55%, #0b1020) 0%, color-mix(in srgb, var(--accent) 26%, #0b1020) 100%) !important; }
+
+/* Claridad del mes */
+.clear-math { display: grid; gap: 2px; margin-top: 4px; }
+.clear-math > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: .95rem; }
+.clear-math > div span small { color: var(--muted); }
+.clear-math b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.clear-math .clear-free { border-bottom: 0; padding-top: 10px; font-size: 1.1rem; font-weight: 700; }
+.clear-math .clear-free b { font-size: 1.45rem; letter-spacing: -.02em; }
+.clear-day { margin: 2px 0 6px; }
+.pay-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pay-head .muted { margin: 0; }
+.paylist { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.paylist li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px; background: var(--bg); }
+.paylist li span { min-width: 0; overflow-wrap: anywhere; }
+.paylist li b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.paylist .btn.small, .gbtns .btn.small { min-height: 38px; padding: 6px 14px; border-radius: 12px; font-size: .85rem; }
+.paydone { margin: 10px 0 0; color: var(--pos); font-weight: 600; font-size: .92rem; }
+
+/* Comparación con el mes anterior */
+.delta { display: inline-block; font-size: .72rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; vertical-align: middle; letter-spacing: 0; white-space: nowrap; }
+.delta.good { background: color-mix(in srgb, var(--pos) 14%, transparent); color: var(--pos); }
+.delta.bad { background: color-mix(in srgb, var(--neg) 14%, transparent); color: var(--neg); }
+.delta.same { background: var(--bg); color: var(--muted); font-weight: 600; }
+.hbig .delta { font-size: .78rem; margin-left: 6px; }
+.txsum .delta { margin-top: 4px; }
+
+/* Guía para empezar el mes */
+.card.guide { border: 1.5px solid color-mix(in srgb, var(--accent) 35%, var(--line)); background: linear-gradient(180deg, var(--accent-soft), var(--card) 70%); }
+.guide-bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 4px; }
+.guide-bar i { display: block; height: 100%; background: var(--btn, var(--accent)); border-radius: 999px; }
+.guide-steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.guide-steps li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; }
+.guide-steps .gnum { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: .8rem; font-weight: 800; color: #fff; counter-increment: g; }
+.guide-steps li.done .gnum { background: var(--pos); border-color: var(--pos); }
+.guide-steps li b { display: block; font-size: .95rem; }
+.guide-steps li small { display: block; color: var(--muted); font-size: .82rem; }
+.guide-steps li.done b { color: var(--muted); text-decoration: line-through; font-weight: 600; }
+.gbtns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+@media (min-width: 1000px) { .homegrid > .guide { grid-column: 1 / -1; margin: 0; } }
+.paylist .payof { display: block; color: var(--muted); font-size: .75rem; }

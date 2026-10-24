@@ -435,6 +435,71 @@ function monthlyPayCard() {
 const homePeriod = () => ['dia', 'semana', 'quincena', 'mes'].includes(data.settings.homePeriod)
   ? data.settings.homePeriod : (isAdmin() ? 'semana' : 'mes');
 
+/* ---------- claridad del mes: libre de verdad, por pagar, comparación y guía ---------- */
+function pctChange(now, before) {
+  if (!(before > 0)) return null;
+  return Math.round((now - before) / before * 100);
+}
+// flecha ↑↓ frente al mes anterior. good: 'down' si bajar es bueno (gastos), 'up' si subir es bueno (ingresos)
+function deltaTag(now, before, good = 'down') {
+  const p = pctChange(now, before);
+  if (p === null) return '';
+  if (p === 0) return '<span class="delta same">= igual que el mes pasado</span>';
+  const up = p > 0, ok = good === 'down' ? !up : up;
+  return `<span class="delta ${ok ? 'good' : 'bad'}" title="Frente a ${esc(monthLabel(shiftMonth(ui.month, -1)))}">${up ? '↑' : '↓'} ${Math.abs(p)}%</span>`;
+}
+// lo que falta por gastar/pagar de cada gasto mensual (sin contar dos veces lo que ya gastaste en esa categoría)
+function pendingFixed(month = ui.month) {
+  const spent = spentByCat(month);
+  return budgetCats().filter(c => budgetFor(c, month) > 0 && !budgetPayment(c, month))
+    .map(c => ({ cat: c, amount: Math.max(0, budgetFor(c, month) - (spent[c] || 0)), budget: budgetFor(c, month), spent: spent[c] || 0 }))
+    .filter(x => x.amount > 0);
+}
+function clarityCard() {
+  const m = ui.month, isNow = m === refDay().slice(0, 7);
+  const payable = budgetCats().filter(c => budgetFor(c) > 0);
+  const pend = pendingFixed(m), pendTotal = pend.reduce((s, x) => s + x.amount, 0);
+  if (!isNow && !payable.length) return '';
+  const accBal = balances(), total = accounts().reduce((s, a) => s + (accBal[a.id] || 0), 0);
+  const reserved = reservedAmounts().total;
+  const free = total - reserved - pendTotal;
+  const end = fmtD(new Date(+m.slice(0, 4), +m.slice(5, 7), 0));
+  const daysLeft = Math.max(1, daysBetween(refDay(), addDays(end, 1)));
+  const paidN = payable.filter(c => budgetPayment(c, m) || (spentByCat(m)[c] || 0) >= budgetFor(c, m)).length;
+  const hasMoney = total !== 0 || live(data.transactions).length > 0;
+  const freeHTML = isNow && hasMoney ? `<div class="clear-math">
+      <div><span>Dinero hoy</span><b>${fmt(total)}</b></div>
+      ${pendTotal > 0 ? `<div><span>− Gastos mensuales por pagar <small>(${pend.length})</small></span><b class="neg">−${fmt(pendTotal)}</b></div>` : ''}
+      ${reserved > 0 ? `<div><span>− Reservado para ahorro</span><b class="neg">−${fmt(reserved)}</b></div>` : ''}
+      <div class="clear-free"><span>Libre de verdad</span><b class="${free < 0 ? 'neg' : 'pos'}">${fmt(free)}</b></div>
+    </div>
+    <p class="muted clear-day">${free > 0 ? `Puedes gastar unos <b>${fmt(Math.floor(free / daysLeft))}</b> por día hasta el ${shortDay(end)} (${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}).` : free < 0 ? '⚠️ Lo que tienes no alcanza para los gastos fijos que faltan. Revisa tus gastos ocio.' : 'Ya no te queda dinero libre este mes.'}</p>` : '';
+  const listHTML = payable.length ? `<div class="pay-head"><b>Por pagar este mes</b><span class="muted">${paidN} de ${payable.length} pagados</span></div>
+    ${pend.length ? `<ul class="paylist">${pend.map(x => `<li><span>${withEmoji(x.cat, '🧾')}${x.spent > 0 ? `<small class="payof">faltan de ${fmt(x.budget)}</small>` : ''}</span><b>${fmt(x.amount)}</b>${x.spent > 0 ? '<button type="button" class="btn small ghost" data-tab="presupuesto">Ver</button>' : `<button type="button" class="btn small" data-action="pay-bud" data-cat="${esc(x.cat)}">Pagar</button>`}</li>`).join('')}</ul>`
+      : '<p class="paydone">✅ Todos tus gastos fijos de este mes están pagados.</p>'}` : (isNow ? '<p class="muted">Agrega tus gastos fijos (arriendo, luz, internet…) para ver cuánto te queda libre de verdad. <button type="button" class="slink" data-action="new-budget">+ Agregar</button></p>' : '');
+  return `<section class="card clear">
+    <div class="summary-head"><h3>${isNow ? 'Tu mes, claro' : 'Gastos fijos de ' + esc(monthLabel(m).split(' ')[0])}</h3></div>
+    ${freeHTML}${listHTML}
+  </section>`;
+}
+function guideCard() {
+  const m = ui.month;
+  if (m !== refDay().slice(0, 7) || (data.settings.guideHidden || '') === m) return '';
+  const accs = accounts();
+  const steps = [
+    { done: accs.some(a => (a.initial || 0) !== 0), t: 'Anota cuánto tienes hoy', d: 'El saldo con que empiezas en efectivo y en el banco.', btn: accs.map(a => `<button type="button" class="btn small ghost" data-action="edit-acc" data-id="${a.id}">${accIcon(a)} ${esc(a.name)}</button>`).join('') },
+    { done: txOfMonth(m).some(t => t.type === 'ingreso'), t: 'Registra tu sueldo o ingreso', d: 'Así sabes con cuánto cuentas este mes.', btn: '<button type="button" class="btn small" data-action="new-income">+ Ingreso</button>' },
+    { done: budgetCats().length > 0, t: 'Agrega tus gastos fijos', d: 'Arriendo, cuentas, internet, suscripciones…', btn: '<button type="button" class="btn small" data-action="new-budget">+ Gasto fijo</button>' },
+    { done: live(data.goals).length > 0, t: 'Ponte una meta o anota una deuda', d: 'Opcional, para ahorrar con un objetivo.', btn: '<button type="button" class="btn small ghost" data-action="new-goal">+ Meta</button>' },
+  ];
+  const n = steps.filter(s => s.done).length;
+  if (n === steps.length) return '';
+  return `<section class="card guide">
+    <div class="summary-head"><h3>🚀 Empieza ${esc(monthLabel(m).split(' ')[0])} ordenado</h3><button type="button" class="slink" data-action="guide-hide">Ocultar</button></div>
+    <div class="guide-bar"><i style="width:${n / steps.length * 100}%"></i></div><p class="muted" style="margin-top:6px">${n} de ${steps.length} pasos listos</p>
+    <ol class="guide-steps">${steps.map(s => `<li class="${s.done ? 'done' : ''}"><span class="gnum" aria-hidden="true">${s.done ? '✓' : ''}</span><div><b>${s.t}</b><small>${s.d}</small>${s.done ? '' : `<div class="gbtns">${s.btn}</div>`}</div></li>`).join('')}</ol>
+  </section>`;
+}
 function homePeriodCard() {
   const period = homePeriod();
   if (period === 'semana') return weekCard();
@@ -1290,11 +1355,14 @@ const views = {
 
     // 3. En qué gastas: una barra delgada y la lista corta
     const top = byCat.slice(0, 4), rest = byCat.slice(4).reduce((s, [, v]) => s + v, 0);
+    const prevOcio = {};
+    for (const t of occasionalExpenses(shiftMonth(ui.month, -1))) prevOcio[t.category] = (prevOcio[t.category] || 0) + t.amount;
+    const prevExp = Object.values(prevOcio).reduce((s, v) => s + v, 0);
     const spendCard = `<section class="card">
         <div class="summary-head"><h3>Gastos ocio</h3><a href="#" data-tab="movimientos">Ver todo</a></div>
-        ${exp > 0 ? `<div class="hbig">${fmt(exp)}</div>
+        ${exp > 0 ? `<div class="hbig">${fmt(exp)} ${deltaTag(exp, prevExp)}</div>
           <div class="stackbar" role="img" aria-label="Gastos por categoría">${byCat.map(([c, v]) => `<span style="width:${v / exp * 100}%;background:${catColor(c)}"></span>`).join('')}</div>
-          <ul class="mlist">${top.map(([c, v]) => `<li><i style="background:${catColor(c)}"></i><span>${withEmoji(c, '🧾')}</span><b>${fmt(v)}</b></li>`).join('')}
+          <ul class="mlist">${top.map(([c, v]) => `<li><i style="background:${catColor(c)}"></i><span>${withEmoji(c, '🧾')} ${deltaTag(v, prevOcio[c] || 0)}</span><b>${fmt(v)}</b></li>`).join('')}
             ${rest > 0 ? `<li><i style="background:var(--line)"></i><span>Otros</span><b>${fmt(rest)}</b></li>` : ''}</ul>`
           : '<p class="muted">Sin gastos de ocio este mes</p>'}
       </section>`;
@@ -1317,7 +1385,7 @@ const views = {
         ${funds ? `<div class="hfunds">${funds}</div>` : ''}
       </section>` : '';
 
-    return `<div class="homegrid">${money}<div class="hcol">${homePeriodCard()}${budCard}${goalsCard}</div><div class="hcol">${spendCard}</div></div>`;
+    return `<div class="homegrid">${guideCard()}${money}<div class="hcol">${clarityCard()}${homePeriodCard()}${budCard}${goalsCard}</div><div class="hcol">${spendCard}</div></div>`;
   },
 
   movimientos() {
@@ -1331,7 +1399,8 @@ const views = {
     const list = Object.entries(groups).map(([d, ts]) => `<h4 class="day">${dayLabel(d)}</h4>
       <ul class="txlist">${ts.map(txRow).join('')}</ul>`).join('');
     const all = txOfMonth(ui.month), inc = all.filter(t => t.type === 'ingreso').reduce((s, t) => s + t.amount, 0), out = all.filter(t => t.type === 'gasto').reduce((s, t) => s + t.amount, 0);
-    const sum = `<section class="card txsum"><div><small>Ingresos</small><b class="pos">${fmt(inc)}</b></div><div><small>Gastos</small><b class="neg">${fmt(out)}</b></div><div><small>Balance</small><b class="${inc - out < 0 ? 'neg' : ''}">${fmt(inc - out)}</b></div></section>`;
+    const pv = txOfMonth(shiftMonth(ui.month, -1)), pInc = pv.filter(t => t.type === 'ingreso').reduce((s, t) => s + t.amount, 0), pOut = pv.filter(t => t.type === 'gasto').reduce((s, t) => s + t.amount, 0);
+    const sum = `<section class="card txsum"><div><small>Ingresos</small><b class="pos">${fmt(inc)}</b>${deltaTag(inc, pInc, 'up')}</div><div><small>Gastos</small><b class="neg">${fmt(out)}</b>${deltaTag(out, pOut)}</div><div><small>Balance</small><b class="${inc - out < 0 ? 'neg' : ''}">${fmt(inc - out)}</b></div></section>`;
     return sum + `<div class="seg">${seg}</div>${list || '<p class="empty">No hay movimientos este mes.<br>Toca + para agregar uno.</p>'}`;
   },
 
@@ -1751,6 +1820,8 @@ document.addEventListener('click', e => {
     case 'filter': ui.filter = el.dataset.v; render(); break;
     case 'new-tx': openTx(); break;
     case 'new-income': openTx(); setTxType('ingreso'); break;
+    case 'pay-bud': openBudgetPayment(el.dataset.cat); break;
+    case 'guide-hide': data.settings = Object.assign({}, data.settings, { guideHidden: ui.month, updatedAt: now() }); commit(); toast('Puedes volver a verla el próximo mes'); break;
     case 'edit-name': ui.editName = !ui.editName; render(); if (ui.editName) setTimeout(() => { const i = $('#myName'); if (i) { i.focus(); i.select(); } }, 30); break;
     case 'toggle-pass': ui.passOpen = !ui.passOpen; render(); break;
     case 'home-goal':
