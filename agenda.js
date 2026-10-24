@@ -6,7 +6,7 @@ const AGENDA_STATUS = { cola: 'Por hacer', curso: 'En reparación', pausa: 'Paus
 const agendaUI = { date: '', panel: 'hoy', filter: 'pendientes' };
 function agendaDefaults() {
   return { jobs: [], blocks: [], exceptions: {}, completed: {}, exerciseVersion: 1,
-    config: { weekdayStart: '10:30', weekdayEnd: '19:30', saturdayStart: '10:30', saturdayEnd: '15:00', breakStart: '14:00', breakMinutes: 30, gap: 10 },
+    config: { wakeTime: '08:30', commuteMinutes: 30, prepMinutes: 20, weekdayStart: '10:30', weekdayEnd: '19:30', saturdayStart: '10:30', saturdayEnd: '15:00', breakStart: '14:00', breakMinutes: 30, gap: 10 },
     routines: [
       { id: 'ejercicio-lunes', day: 1, time: '09:00', minutes: 20, name: 'Ejercicio en casa' },
       { id: 'ejercicio-miercoles', day: 3, time: '09:00', minutes: 20, name: 'Ejercicio en casa' },
@@ -37,6 +37,7 @@ function personalAgenda() {
     }
   }
   a.exerciseVersion = 1;
+  for (const r of a.routines) if (r.id.startsWith('ejercicio-') && !Number.isFinite(r.wakeOffset)) r.wakeOffset = agMinutes(r.time) - agMinutes(a.config.wakeTime);
   a.routines.sort((x,y) => (x.day+6)%7 - (y.day+6)%7 || x.time.localeCompare(y.time));
   delete a.nextSimple;
   return a;
@@ -112,9 +113,47 @@ function agendaPersonalConflict(a, block, ignoreKey = '') {
   const workFrom = agMinutes(day === 6 ? a.config.saturdayStart : a.config.weekdayStart);
   const workTo = agMinutes(day === 6 ? a.config.saturdayEnd : a.config.weekdayEnd);
   // También protege el descanso del taller, dentro de su jornada.
-  if (day !== 0 && from < workTo + 30 && to > workFrom - 30) return 'Ese horario está reservado para el trabajo y el traslado. Elige un espacio fuera de la jornada.';
+  const commute = Number(a.config.commuteMinutes ?? 30);
+  if (day !== 0 && from < workTo + commute && to > workFrom - commute) return 'Ese horario está reservado para el trabajo y el traslado. Elige un espacio fuera de la jornada.';
   if (agendaOccurrences(a, block.date, block.date).some(b => b.key !== ignoreKey && from < agMinutes(b.time) + b.minutes && to > agMinutes(b.time))) return 'Ya tienes otra actividad en ese horario.';
   return '';
+}
+function agendaMorning(a, date) {
+  const wake = agMinutes(a.config.wakeTime || '08:30');
+  const day = parseD(date).getDay();
+  const leave = day === 0 ? null : agMinutes(day === 6 ? a.config.saturdayStart : a.config.weekdayStart) - Number(a.config.commuteMinutes ?? 30);
+  const exercise = agendaOccurrences(a,date,date).filter(b=>b.id.startsWith('ejercicio-'));
+  const used = exercise.reduce((sum,b)=>sum+Number(b.minutes),0);
+  return { wake, leave, exercise, available: leave === null ? null : Math.max(0, leave-wake), free: leave === null ? null : Math.max(0,leave-wake-used-Number(a.config.prepMinutes ?? 20)) };
+}
+function agendaScheduleError(a) {
+  const wake = agMinutes(a.config.wakeTime || '08:30');
+  if (!Number.isFinite(wake)) return 'Revisa la hora de levantarte.';
+  for (const start of [a.config.weekdayStart,a.config.saturdayStart]) {
+    if (wake + Number(a.config.prepMinutes ?? 20) > agMinutes(start) - Number(a.config.commuteMinutes ?? 30)) return 'No queda tiempo para prepararte y llegar al trabajo. Elige una hora más temprana.';
+  }
+  const monday = addDays(today(),-(parseD(today()).getDay()+6)%7);
+  for (const r of a.routines) {
+    const date=addDays(monday,(r.day+6)%7);
+    if(r.id.startsWith('ejercicio-') && agMinutes(r.time)<wake) return 'El ejercicio no puede quedar antes de levantarte.';
+    const message=agendaPersonalConflict({...a,exceptions:{}},{...r,date},agKey(date,r.id));
+    if(message) return `${r.name}: ${message}`;
+    if(r.id.startsWith('ejercicio-') && agMinutes(r.time)+r.minutes+Number(a.config.prepMinutes ?? 20)>agMinutes(r.day===6?a.config.saturdayStart:a.config.weekdayStart)-Number(a.config.commuteMinutes ?? 30)) return 'El ejercicio deja poco tiempo para prepararte. Levántate antes o reduce su duración.';
+  }
+  for(const b of a.blocks){const message=agendaPersonalConflict(a,b,b.id);if(message)return `${b.name}: ${message}`;}
+  return '';
+}
+function agendaChangeWake(a, time, commute, prep) {
+  const wake=agMinutes(time);
+  if(!Number.isFinite(wake)||!Number.isFinite(commute)||commute<0||commute>180||!Number.isFinite(prep)||prep<5||prep>120) return 'Revisa la hora, el traslado y el tiempo para prepararte.';
+  const previous=agMinutes(a.config.wakeTime || '08:30');
+  a.config={...a.config,wakeTime:time,commuteMinutes:commute,prepMinutes:prep};
+  for(const r of a.routines) if(r.id.startsWith('ejercicio-')) {
+    const offset=Number.isFinite(r.wakeOffset)?r.wakeOffset:agMinutes(r.time)-previous;
+    if(wake+offset<0||wake+offset+r.minutes>1440)return 'El ejercicio debe quedar dentro del mismo día.';
+    r.wakeOffset=offset;r.time=agTime(wake+offset);
+  }
+  return agendaScheduleError(a);
 }
 function agendaJobRow(j, a, plan) {
   const slot = plan.slots.find(s => s.id === j.id);
@@ -133,7 +172,7 @@ function agendaJobRow(j, a, plan) {
 }
 function agendaBlockRow(b, a) {
   const done = !!a.completed[b.key];
-  return `<div class="ag-personal ${done ? 'ag-done' : ''}"><div><b>${esc(b.name)}</b><span class="ag-caption">${b.time}–${agTime(agMinutes(b.time) + b.minutes)}${b.recurring ? ' · semanal' : ''}${done ? ' · completado' : ''}</span></div><div class="ag-job-actions"><button class="btn small ghost" data-ag="complete-block" data-key="${esc(b.key)}">${done ? 'Deshacer' : 'Hecho'}</button><button class="btn small ghost" data-ag="move-block" data-key="${esc(b.key)}" data-date="${b.date}">Mover</button></div></div>`;
+  return `<div class="ag-personal ${done ? 'ag-done' : ''}"><div><b>${esc(b.name)}</b><span class="ag-caption">${b.time}–${agTime(agMinutes(b.time) + b.minutes)}${b.recurring ? ' · semanal' : ''}${done ? ' · completado' : ''}</span></div><details class="ag-options"><summary>Opciones<span class="sr-only"> de ${esc(b.name)}</span></summary><div class="ag-job-actions"><button class="btn small ghost" data-ag="complete-block" data-key="${esc(b.key)}">${done ? 'Deshacer' : 'Hecho'}</button><button class="btn small ghost" data-ag="move-block" data-key="${esc(b.key)}" data-date="${b.date}">Mover</button></div></details></div>`;
 }
 function renderPersonalAgenda() {
   if (!hasPersonalAgenda()) return '';
@@ -141,6 +180,9 @@ function renderPersonalAgenda() {
   const pending = a.jobs.filter(j => j.status !== 'listo').sort((x,y) => x.received.localeCompare(y.received) || x.order-y.order);
   const monday = addDays(date, -(parseD(date).getDay() + 6) % 7), sunday = addDays(monday,6);
   const week = agendaOccurrences(a, monday, sunday);
+  const morning=agendaMorning(a,date);
+  const duration=n=>`${Math.floor(n/60)?Math.floor(n/60)+' h ':''}${n%60?n%60+' min':n===0?'0 min':''}`.trim();
+  const morningCard=`<details class="ag-morning"><summary><span>Mi mañana</span><span class="ag-caption">Me levanto ${a.config.wakeTime} · ${morning.leave===null?'día libre':'salgo '+agTime(morning.leave)}</span></summary><form id="agendaMorningForm" class="form"><label>Me levanto a las<input type="time" name="wakeTime" value="${a.config.wakeTime}" required></label><details><summary>Traslado y preparación</summary><div class="ag-fields"><label>Traslado · minutos<input type="number" name="commuteMinutes" min="0" max="180" value="${a.config.commuteMinutes}" required></label><label>Prepararme · minutos<input type="number" name="prepMinutes" min="5" max="120" value="${a.config.prepMinutes}" required></label></div></details><output class="ag-caption" data-wake-preview>${morning.available===null?'Sin salida al trabajo este día.':`${duration(morning.available)} antes de salir · ${duration(morning.free)} fuera de ejercicio y preparación.`}</output><p class="ag-caption">Al cambiar tu hora se ajusta el ejercicio de la rutina. Las actividades movidas a una fecha concreta y los cursos conservan su horario.</p><p class="ag-error" role="alert"></p><button class="btn">Guardar mi mañana</button></form></details>`;
   const jobForm = `<dialog id="agendaJobDialog"><form id="agendaJobForm" class="form" method="dialog"><h3 id="agendaJobTitle">Agregar equipo</h3><input type="hidden" name="id">
     <label>Equipo / modelo<input name="device" maxlength="80" required placeholder="Ej. iPhone 12 o MacBook Air"></label>
     <label>Falla o trabajo<textarea name="fault" maxlength="240" required placeholder="Ej. No enciende; primero diagnosticar"></textarea></label>
@@ -156,7 +198,7 @@ function renderPersonalAgenda() {
     const jobs = (agendaUI.filter === 'listo' ? a.jobs.filter(j=>j.status === 'listo').sort((x,y)=>(y.finished || y.received).localeCompare(x.finished || x.received)) : pending);
     content = `<section><div class="ag-row"><h3>Mis equipos</h3><label class="ag-filter">Ver<select id="agendaFilter"><option value="pendientes" ${agendaUI.filter==='pendientes'?'selected':''}>Pendientes</option><option value="listo" ${agendaUI.filter==='listo'?'selected':''}>Terminados</option></select></label></div><p class="ag-caption">Orden de llegada. Los equipos en espera conservan su turno y liberan tu espacio de trabajo.</p>${jobs.length ? jobs.map(j=>agendaJobRow(j,a,plan)).join('') : '<p class="muted">No hay equipos en esta lista.</p>'}</section>`;
   } else if (agendaUI.panel === 'semana') {
-    content = `<section><div class="ag-row"><h3>Mi semana · ${esc(shortDay(monday))}–${esc(shortDay(sunday))}</h3><label class="ag-filter">Fecha<input id="agendaDate" type="date" value="${date}"></label></div>${Array.from({length:7},(_,i)=>{ const day=addDays(monday,i), blocks=week.filter(b=>b.date===day), windows=agendaWorkWindows(day,a.config); return `<section class="ag-weekday"><h4>${esc(shortDay(day))}</h4><p class="ag-caption">${windows.length ? `Trabajo ${windows[0] && agTime(windows[0][0])}–${agTime(windows[windows.length-1][1])} · traslado de 30 min por trayecto` : 'Sin trabajo programado · tiempo personal'}</p>${blocks.map(b=>agendaBlockRow(b,a)).join('')}${!blocks.length ? '<p class="ag-caption">Tiempo libre, sin tareas añadidas.</p>' : ''}</section>`; }).join('')}<button class="btn ghost" data-ag="new-block">Agregar actividad</button></section>`;
+    content = `<section><div class="ag-row"><h3>Mi semana · ${esc(shortDay(monday))}–${esc(shortDay(sunday))}</h3><label class="ag-filter">Fecha<input id="agendaDate" type="date" value="${date}"></label></div>${Array.from({length:7},(_,i)=>{ const day=addDays(monday,i), blocks=week.filter(b=>b.date===day), windows=agendaWorkWindows(day,a.config); return `<section class="ag-weekday"><h4>${esc(shortDay(day))}</h4><p class="ag-caption">${windows.length ? `Trabajo ${windows[0] && agTime(windows[0][0])}–${agTime(windows[windows.length-1][1])} · traslado de ${a.config.commuteMinutes} min por trayecto` : 'Sin trabajo programado · tiempo personal'}</p>${blocks.map(b=>agendaBlockRow(b,a)).join('')}${!blocks.length ? '<p class="ag-caption">Tiempo libre, sin tareas añadidas.</p>' : ''}</section>`; }).join('')}<button class="btn ghost" data-ag="new-block">Agregar actividad</button></section>`;
   } else {
     const daySlots = plan.slots.filter(s=>s.date === date);
     const personal = agendaOccurrences(a,date,date);
@@ -164,16 +206,16 @@ function renderPersonalAgenda() {
     content = `<section><div class="ag-row"><h3>Tu día</h3><label class="ag-filter">Fecha<input id="agendaDate" type="date" value="${date}"></label></div>
       ${inProgress.length ? `<div class="ag-now"><span class="ag-caption">En reparación ahora</span>${inProgress.map(j=>`<p><b>${esc(j.device)}</b></p>`).join('')}</div>` : '<p class="ag-caption">Empieza un equipo de tu cola para marcar lo que estás haciendo.</p>'}
       <section class="ag-my-work"><h4>Mis reparaciones</h4>${daySlots.map(s=>{const j=a.jobs.find(j=>j.id===s.id);return `<div class="ag-slot"><span>${s.from}–${s.to}</span><b>${esc(j.device)}</b><small>#${String(j.order).padStart(3,'0')} · ${esc(j.fault)}</small><button class="slink" data-ag="edit-job" data-id="${esc(j.id)}">Ver equipo</button></div>`;}).join('') || '<p class="ag-caption">Sin reparaciones previstas para este día.</p>'}</section>
-      <div class="ag-personal-section"><div class="ag-row"><h3>Fuera del taller</h3><button class="slink" data-ag="new-block">Agregar actividad</button></div><p class="ag-caption">Regreso de 30 minutos y descanso antes de los bloques de la noche. Cierra tus actividades para conservar tiempo para ti.</p>${personal.map(b=>agendaBlockRow(b,a)).join('') || '<p class="muted">No tienes actividades añadidas. Puedes dejar este espacio libre.</p>'}</div>
+      <div class="ag-personal-section"><div class="ag-row"><h3>Fuera del taller</h3><button class="slink" data-ag="new-block">Agregar actividad</button></div><p class="ag-caption">Trabajo, cursos y tiempo personal, sin cruzar horarios.</p>${personal.map(b=>agendaBlockRow(b,a)).join('') || '<p class="muted">No tienes actividades añadidas. Puedes dejar este espacio libre.</p>'}</div>
       ${pending.length ? `<details class="ag-more"><summary>Siguiente equipo</summary>${(()=>{const j=pending.find(j=>['cola','curso'].includes(j.status));return j?agendaJobRow(j,a,plan):'<p class="ag-caption">Tus equipos están en espera.</p>';})()}</details>` : ''}</section>`;
   }
-  return `<div class="personal-agenda"><header class="ag-header"><div><h2>Mi agenda</h2><p class="ag-caption">Solo en tu cuenta · ${pending.length} ${pending.length===1?'equipo pendiente':'equipos pendientes'}</p></div><div class="ag-job-actions"><button class="btn ghost" data-ag="refresh">Actualizar</button><button class="btn" data-ag="new-job">Agregar equipo</button></div></header>
+  return `<div class="personal-agenda"><header class="ag-header"><div><h2>Mi agenda</h2><p class="ag-caption">Solo en tu cuenta · ${pending.length} ${pending.length===1?'equipo pendiente':'equipos pendientes'}</p></div><div class="ag-job-actions"><button class="slink" data-ag="refresh">Actualizar</button><button class="btn" data-ag="new-job">Agregar equipo</button></div></header>
     <div class="period-switch ag-tabs" role="group" aria-label="Vista de mi agenda">${[['hoy','Hoy'],['cola','Mis equipos'],['semana','Mi semana']].map(([id,name])=>`<button data-ag="panel" data-panel="${id}" aria-pressed="${agendaUI.panel===id}">${name}</button>`).join('')}</div>
-    ${!a.jobs.length && agendaUI.panel !== 'semana' ? '<div class="ag-empty"><p>Agrega tu primer equipo con el modelo, la falla y el tiempo estimado. La agenda le asignará un turno.</p><button class="btn" data-ag="new-job">Agregar mi primer equipo</button></div>' : ''}
+    ${morningCard}
     ${plan.unplaced.length ? '<p class="ag-error">Hay equipos sin horario. Revisa la duración y tu jornada.</p>' : ''}${content}
     <details class="ag-config"><summary>Configurar mi horario y rutina</summary><form id="agendaConfigForm" class="form"><p class="ag-caption">Tu horario de trabajo. Domingo libre. Descanso propuesto de 14:00 a 14:30 y margen de 10 minutos; puedes ajustarlos.</p><div class="ag-fields"><label>Lunes a viernes · entrada<input name="weekdayStart" type="time" value="${a.config.weekdayStart}" required></label><label>Salida<input name="weekdayEnd" type="time" value="${a.config.weekdayEnd}" required></label><label>Sábado · entrada<input name="saturdayStart" type="time" value="${a.config.saturdayStart}" required></label><label>Salida del sábado<input name="saturdayEnd" type="time" value="${a.config.saturdayEnd}" required></label><label>Inicio del descanso<input name="breakStart" type="time" value="${a.config.breakStart}" required></label><label>Descanso · minutos (0 para quitar)<input name="breakMinutes" type="number" min="0" max="120" step="5" value="${a.config.breakMinutes}" required></label><label>Margen entre equipos · minutos<input name="gap" type="number" min="0" max="60" step="5" value="${a.config.gap}" required></label></div>
     <h3>Rutina semanal</h3><p class="ag-caption">Aplica a las próximas semanas. Puedes mover una fecha concreta desde Mi semana.</p>${a.routines.map(r=>`<fieldset class="ag-routine"><legend>${esc(DAYS[r.day])}</legend><label>Actividad<input name="name-${r.id}" maxlength="80" value="${esc(r.name)}" required></label><div class="ag-fields"><label>Hora<input type="time" name="time-${r.id}" value="${r.time}" required></label><label>Minutos<input type="number" min="5" max="240" step="5" name="minutes-${r.id}" value="${r.minutes}" required></label></div></fieldset>`).join('')}<p class="ag-error" role="alert"></p><button class="btn">Guardar horario</button></form></details>
-    <p class="ag-caption ag-footnote">Los horarios se recalculan con las duraciones estimadas al abrir o actualizar la agenda. Los equipos pausados no se reprograman hasta retomarlos. La agenda no crea gastos ni ingresos.</p>
+    <details class="ag-help"><summary>Cómo se organizan los horarios</summary><p class="ag-caption ag-footnote">Los horarios se recalculan con las duraciones estimadas al abrir o actualizar la agenda. Los equipos pausados no se reprograman hasta retomarlos. La agenda no crea gastos ni ingresos.</p></details>
     ${jobForm}${personalForm}</div>`;
 }
 function agendaOpenJob(id = '') {
@@ -226,10 +268,13 @@ document.addEventListener('change', event=>{
 document.addEventListener('submit',event=>{
   const f=event.target;
   const formID=f.getAttribute('id');
-  if(!['agendaJobForm','agendaBlockForm','agendaConfigForm'].includes(formID))return;
+  if(!['agendaJobForm','agendaBlockForm','agendaConfigForm','agendaMorningForm'].includes(formID))return;
   event.preventDefault();if(!hasPersonalAgenda())return;
   const a=personalAgenda(), v=name=>f.elements[name].value, error=message=>{f.querySelector('.ag-error').textContent=message;};
-  if(formID==='agendaJobForm'){
+  if(formID==='agendaMorningForm'){
+    const message=agendaChangeWake(a,v('wakeTime'),Number(v('commuteMinutes')),Number(v('prepMinutes')));
+    if(message){error(message);return;}
+  }else if(formID==='agendaJobForm'){
     const id=v('id'), old=a.jobs.find(j=>j.id===id), kind=v('kind'), minutes=Number(v('minutes')), received=v('received');
     if(!v('device').trim()||!v('fault').trim()||!AGENDA_KINDS[kind]||!AGENDA_STATUS[v('status')]||!Number.isFinite(minutes)||minutes<5||minutes>480||minutes%5||!agDateValid(received.slice(0,10))||!Number.isFinite(agMinutes(received.slice(11,16)))){error('Revisa el equipo, la llegada y la duración (de 5 a 480 minutos, en pasos de 5).');return;}
     if(!old&&a.jobs.length>=500){error('La agenda admite 500 equipos. Conserva tu historial mediante una exportación antes de seguir ampliándola.');return;}
@@ -249,18 +294,25 @@ document.addEventListener('submit',event=>{
     if(v('origin')){a.exceptions[v('origin')]=true;if(a.completed[v('origin')])a.completed[block.id]=true;}
     document.getElementById('agendaBlockDialog').close();
   }else{
-    const config={weekdayStart:v('weekdayStart'),weekdayEnd:v('weekdayEnd'),saturdayStart:v('saturdayStart'),saturdayEnd:v('saturdayEnd'),breakStart:v('breakStart'),breakMinutes:Number(v('breakMinutes')),gap:Number(v('gap'))};
+    const config={...a.config,weekdayStart:v('weekdayStart'),weekdayEnd:v('weekdayEnd'),saturdayStart:v('saturdayStart'),saturdayEnd:v('saturdayEnd'),breakStart:v('breakStart'),breakMinutes:Number(v('breakMinutes')),gap:Number(v('gap'))};
     if(Object.entries(config).some(([key,value])=>typeof value==='string'?!Number.isFinite(agMinutes(value)):!Number.isFinite(value))||agMinutes(config.weekdayStart)>=agMinutes(config.weekdayEnd)||agMinutes(config.saturdayStart)>=agMinutes(config.saturdayEnd)||config.breakMinutes<0||config.breakMinutes>120||config.gap<0||config.gap>60){error('Revisa las horas de entrada, salida, descanso y margen.');return;}
     if(!agendaWorkWindows('2026-11-02',config).length||!agendaWorkWindows('2026-11-07',config).length){error('El descanso no puede ocupar toda la jornada.');return;}
     a.config=config;
     for(const r of a.routines){r.name=v('name-'+r.id).trim();r.time=v('time-'+r.id);r.minutes=Number(v('minutes-'+r.id));
       if(!r.name||!Number.isFinite(agMinutes(r.time))||!Number.isFinite(r.minutes)||r.minutes<5||r.minutes>240||agMinutes(r.time)+r.minutes>1440){error('Revisa la hora y duración de la rutina.');return;}
+      if(r.id.startsWith('ejercicio-'))r.wakeOffset=agMinutes(r.time)-agMinutes(a.config.wakeTime);
     }
     // Comprueba una semana representativa sin excepciones, y todas las
     // actividades con fecha. Así un cambio de jornada no crea solapamientos.
-    const monday=addDays(today(),-(parseD(today()).getDay()+6)%7);
-    for(const r of a.routines){const date=addDays(monday,(r.day+6)%7);const message=agendaPersonalConflict({...a,exceptions:{}},{...r,date},agKey(date,r.id));if(message){error(`${r.name}: ${message}`);return;}}
-    for(const b of a.blocks){const message=agendaPersonalConflict(a,b,b.id);if(message){error(`${b.name}: ${message}`);return;}}
+    const message=agendaScheduleError(a);if(message){error(message);return;}
   }
   savePersonalAgenda(a);toast('Agenda guardada en tu cuenta');
+});
+document.addEventListener('input',event=>{
+  if(!hasPersonalAgenda()||!event.target.matches('#agendaMorningForm input'))return;
+  const f=event.target.form,a=personalAgenda();
+  const message=agendaChangeWake(a,f.elements.wakeTime.value,Number(f.elements.commuteMinutes.value),Number(f.elements.prepMinutes.value));
+  const exercise=a.routines.find(r=>r.id.startsWith('ejercicio-'));
+  const morning=agendaMorning(a,agendaUI.date||today());
+  f.querySelector('[data-wake-preview]').textContent=message || `${exercise?'Ejercicio desde '+exercise.time+' en los días programados. ':''}${morning.leave===null?'Día libre.':'Salida al trabajo '+agTime(morning.leave)+'.'}`;
 });
