@@ -515,7 +515,7 @@ function homePeriodCard() {
       <div class="clear-free"><span>Dinero libre</span><b>${fmt(money.free)}</b></div></div></details>
     <div class="period-income"><div class="summary-head"><h3>Ingresos ${periodName}</h3><b>${fmt(inc)}</b></div>
       <div class="kv"><span>Gastos registrados</span><b>${fmt(exp)}</b></div><div class="kv"><span>Ahorro reservado de estos ingresos</span><b>${fmt(reservedAmounts(txs).total)}</b></div>
-      <p class="mnote">El dinero libre incluye lo que traías de antes y descuenta tus compromisos pendientes. <a href="#mis-limites">Ver cuánto destinar a ocio</a></p>
+      <p class="mnote">El dinero libre incluye lo que traías de antes y descuenta tus compromisos pendientes. <button type="button" class="slink" data-action="show-limits">Ver cuánto destinar a ocio</button></p>
       ${!txs.some(isPay) ? '<button type="button" class="btn wide ghost" data-action="new-income">+ Registrar ingreso</button>' : ''}
     </div>
   </section>`;
@@ -1752,6 +1752,7 @@ document.addEventListener('click', e => {
   if (!el) return;
   const id = el.dataset.id;
   switch (el.dataset.action) {
+    case 'show-limits': $('#mis-limites')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
     case 'home-period':
       if (['dia', 'semana', 'quincena', 'mes'].includes(el.dataset.v)) { data.settings = { ...data.settings, homePeriod: el.dataset.v, updatedAt: now() }; commit(); }
       break;
