@@ -515,9 +515,68 @@ function homePeriodCard() {
       <div class="clear-free"><span>Dinero libre</span><b>${fmt(money.free)}</b></div></div></details>
     <div class="period-income"><div class="summary-head"><h3>Ingresos ${periodName}</h3><b>${fmt(inc)}</b></div>
       <div class="kv"><span>Gastos registrados</span><b>${fmt(exp)}</b></div><div class="kv"><span>Ahorro reservado de estos ingresos</span><b>${fmt(reservedAmounts(txs).total)}</b></div>
-      <p class="mnote">El dinero libre incluye lo que traías de antes y descuenta tus compromisos pendientes.</p>
+      <p class="mnote">El dinero libre incluye lo que traías de antes y descuenta tus compromisos pendientes. <a href="#mis-limites">Ver cuánto destinar a ocio</a></p>
       ${!txs.some(isPay) ? '<button type="button" class="btn wide ghost" data-action="new-income">+ Registrar ingreso</button>' : ''}
     </div>
+  </section>`;
+}
+
+/* ---------- casa, ocio semanal y una salida de comida al mes ---------- */
+const SPENDING_GROUPS = { casa: 'Casa', ocio: 'Ocio', comida: 'Comida en la calle', otros: 'Sin clasificar / otros' };
+function spendingGroup(t) {
+  if (t.type !== 'gasto') return '';
+  if (t.budgetMonth) return 'casa';
+  if (Object.hasOwn(SPENDING_GROUPS, t.spendingGroup)) return t.spendingGroup;
+  if (t.date && activeBudget(t.category, t.date.slice(0, 7))) return 'casa';
+  if (t.category === 'Ocio') return 'ocio';
+  if (t.category === 'Comida fuera') return 'comida';
+  if (['Casa', 'Vivienda', 'Cuentas', 'Supermercado'].includes(t.category)) return 'casa';
+  return 'otros';
+}
+function spendingLimits() {
+  const raw = data.settings.spendingLimits || {};
+  return Object.fromEntries(['casa', 'ocio', 'comida'].map(k => [k, typeof raw[k] === 'number' && Number.isFinite(raw[k]) && raw[k] >= 0 ? raw[k] : null]));
+}
+function spendingPlan() {
+  const range = homePeriodRange('semana'), limits = spendingLimits(), money = homeAvailable(range);
+  const monthEnd = addDays(shiftMonth(ui.month, 1) + '-01', -1);
+  const monthTxs = txOfMonth(ui.month).filter(t => t.type === 'gasto' && t.date <= range.date);
+  const weekTxs = live(data.transactions).filter(t => t.type === 'gasto' && t.date >= range.from && t.date <= range.date);
+  const sum = (txs, group) => txs.filter(t => spendingGroup(t) === group).reduce((total, t) => total + t.amount, 0);
+  const spent = { casa: sum(monthTxs, 'casa'), ocio: sum(weekTxs, 'ocio'), comida: sum(monthTxs, 'comida') };
+  const remaining = Object.fromEntries(Object.keys(limits).map(k => [k, limits[k] === null ? null : Math.max(0, limits[k] - spent[k])]));
+  // Las cuentas mensuales ya están reservadas en money.free. Solo se aparta
+  // el resto del límite de casa, evitando descontar esas cuentas dos veces.
+  const extraHouse = remaining.casa === null ? null : Math.max(0, remaining.casa - money.pendingTotal);
+  const ready = remaining.casa !== null && remaining.comida !== null;
+  const pool = ready ? Math.max(0, money.free - extraHouse - remaining.comida) : null;
+  const daysInMonth = Math.max(1, daysBetween(range.date, addDays(monthEnd, 1)));
+  const weekEnd = range.to < monthEnd ? range.to : monthEnd;
+  const daysThisWeek = Math.max(1, daysBetween(range.date, addDays(weekEnd, 1)));
+  const paced = pool === null ? null : Math.floor(pool * daysThisWeek / daysInMonth);
+  const suggested = paced === null ? null : Math.min(paced, remaining.ocio === null ? paced : remaining.ocio);
+  const foodDays = new Set(monthTxs.filter(t => spendingGroup(t) === 'comida').map(t => t.date)).size;
+  return { range, limits, money, spent, remaining, extraHouse, ready, suggested, daysThisWeek, foodDays, unclassified: monthTxs.filter(t => spendingGroup(t) === 'otros').length };
+}
+function spendingPlanCard() {
+  const p = spendingPlan();
+  const names = { casa: ['🏠 Casa', 'Al mes'], ocio: ['🎉 Ocio', 'Por semana · viernes a jueves'], comida: ['🍽️ Comida en la calle', 'Para una salida al mes'] };
+  return `<section class="card spending-plan" id="mis-limites"><div class="summary-head"><h3>Mis límites</h3><span class="muted">${esc(monthLabel(ui.month, true))}</span></div>
+    <div class="spending-suggestion"><span>Para ocio de aquí al ${esc(shortDay(p.range.to))}</span><b>${p.suggested === null ? 'Por configurar' : fmt(p.suggested)}</b>
+    <p class="mnote">${p.ready ? `Sugerencia para los ${p.daysThisWeek} días que quedan de esta semana en el mes, sin contar pagos futuros. Protege lo pendiente de casa, comida y ahorro.` : 'Define los límites de casa y comida para calcular una sugerencia semanal. Puedes poner 0 si no quieres reservar para alguno.'}</p></div>
+    <div class="spending-groups">${Object.entries(names).map(([key, [name, period]]) => `<div class="spending-group"><div class="summary-head"><b>${name}</b><span class="muted">${period}</span></div>
+      <div class="kv"><span>Gastado</span><b>${fmt(p.spent[key])}${p.limits[key] === null ? '' : ` <small>de ${fmt(p.limits[key])}</small>`}</b></div>
+      ${p.limits[key] === null ? '<p class="mnote">Límite sin definir</p>' : `<div class="kv"><span>${p.spent[key] > p.limits[key] ? 'Superaste el límite por' : 'Queda de tu límite'}</span><b class="${p.spent[key] > p.limits[key] ? 'neg' : ''}">${fmt(Math.abs(p.limits[key] - p.spent[key]))}</b></div>${p.limits[key] > 0 ? progress(p.spent[key], p.limits[key]) : ''}`}
+      ${key === 'comida' ? `<p class="mnote">${p.foodDays ? `Ya registraste comida en la calle en ${p.foodDays} ${p.foodDays === 1 ? 'día' : 'días'} este mes. Tu objetivo es una salida mensual.` : 'Aún no registras comida en la calle este mes.'}</p>` : ''}
+    </div>`).join('')}</div>
+    <details class="spending-config"><summary>Configurar mis límites</summary><form id="spendingLimitsForm" class="form">
+      <label>Casa · límite mensual<input name="casa" type="number" min="0" step="any" inputmode="decimal" placeholder="Sin definir" value="${p.limits.casa ?? ''}"></label>
+      <label>Ocio · límite semanal<input name="ocio" type="number" min="0" step="any" inputmode="decimal" placeholder="Sin definir" value="${p.limits.ocio ?? ''}"></label>
+      <label>Comida en la calle · una salida al mes<input name="comida" type="number" min="0" step="any" inputmode="decimal" placeholder="Sin definir" value="${p.limits.comida ?? ''}"></label>
+      <p class="mnote">Déjalos vacíos si aún no sabes el monto. Casa incluye tus gastos mensuales registrados. Los límites son topes de planificación: no mueven dinero ni registran gastos.</p>
+      <button class="btn wide">Guardar mis límites</button></form></details>
+    ${p.unclassified ? `<p class="mnote">${p.unclassified} ${p.unclassified === 1 ? 'gasto sin clasificar' : 'gastos sin clasificar'} este mes. <a href="#" data-tab="movimientos">Revisar movimientos</a></p>` : ''}
+    <p class="mnote">Lo que queda de cada límite comparte el mismo dinero; no son saldos separados.</p>
   </section>`;
 }
 
@@ -1312,12 +1371,12 @@ const views = {
     for (const t of occasionalExpenses(shiftMonth(ui.month, -1))) prevOcio[t.category] = (prevOcio[t.category] || 0) + t.amount;
     const prevExp = Object.values(prevOcio).reduce((s, v) => s + v, 0);
     const spendCard = `<section class="card">
-        <div class="summary-head"><h3>Gastos ocio</h3><a href="#" data-tab="movimientos">Ver todo</a></div>
+        <div class="summary-head"><h3>Gastos del día a día</h3><a href="#" data-tab="movimientos">Ver todo</a></div>
         ${exp > 0 ? `<div class="hbig">${fmt(exp)} ${deltaTag(exp, prevExp)}</div>
           <div class="stackbar" role="img" aria-label="Gastos por categoría">${byCat.map(([c, v]) => `<span style="width:${v / exp * 100}%;background:${catColor(c)}"></span>`).join('')}</div>
           <ul class="mlist">${top.map(([c, v]) => `<li><i style="background:${catColor(c)}"></i><span>${withEmoji(c, '🧾')} ${deltaTag(v, prevOcio[c] || 0)}</span><b>${fmt(v)}</b></li>`).join('')}
             ${rest > 0 ? `<li><i style="background:var(--line)"></i><span>Otros</span><b>${fmt(rest)}</b></li>` : ''}</ul>`
-          : '<p class="muted">Sin gastos de ocio este mes</p>'}
+          : '<p class="muted">Sin gastos del día a día este mes</p>'}
       </section>`;
 
     // 4. Gastos mensuales, con acceso directo para agregar uno
@@ -1338,7 +1397,7 @@ const views = {
         ${funds ? `<div class="hfunds">${funds}</div>` : ''}
       </section>` : '';
 
-    return `<div class="homegrid">${guideCard()}${money}<div class="hcol">${homePeriodCard()}${clarityCard()}${budCard}${goalsCard}</div><div class="hcol">${spendCard}</div></div>`;
+    return `<div class="homegrid">${guideCard()}${money}<div class="hcol">${homePeriodCard()}${clarityCard()}${budCard}${goalsCard}</div><div class="hcol">${spendingPlanCard()}${spendCard}</div></div>`;
   },
 
   movimientos() {
@@ -1504,6 +1563,9 @@ function setTxType(type, selected) {
   const isTr = type === 'transferencia';
   $('#txType').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.type === type));
   $('#catLabel').hidden = isTr || type === 'gasto';
+  $('#spendingGroupWrap').hidden = type !== 'gasto' || !!editingTx?.budgetMonth;
+  $('#txForm').spendingGroup.required = type === 'gasto' && !editingTx?.budgetMonth;
+  if (type === 'gasto') $('#txForm').spendingGroup.value = editingTx ? spendingGroup(editingTx) : '';
   $('#txNewCategoryWrap').hidden = true;
   $('#txForm').newCategory.required = false;
   $('#txForm').newCategory.disabled = true;
@@ -1583,6 +1645,7 @@ function txRow(t) {
     sub = t.type === 'ingreso' ? (methodOf(t) === 'efectivo' ? '💵 Efectivo' : '🏦 Transferencia') : esc(accName(accId(t)));
     amount = (t.type === 'ingreso' ? '+' : '−') + fmt(t.amount); cls = t.type === 'ingreso' ? 'pos' : 'neg';
   }
+  if (t.type === 'gasto') sub += ' · ' + esc(SPENDING_GROUPS[spendingGroup(t)]);
   if (t.reserves && t.type === 'ingreso') sub += ` · Emergencia ${fmt(t.reserves.emergency)} · Ahorro ${fmt(t.reserves.savings)}`;
   const color = t.type === 'transferencia' || t.type === 'ajuste' ? 'var(--muted)' : catColor(t.category);
   return `<li data-action="edit-tx" data-id="${t.id}">
@@ -1876,7 +1939,12 @@ $('#txForm').addEventListener('submit', e => {
   }
   const base = { id: editingTx?.id || uid(), type: txType, amount, date: f.date.value,
     note: f.note.value.trim(), createdAt: editingTx?.createdAt || now() };
-  if (txType === 'gasto') base.expenseName = expenseName;
+  if (txType === 'gasto') {
+    base.expenseName = expenseName;
+    const group = editingTx?.budgetMonth ? 'casa' : f.spendingGroup.value;
+    if (!Object.hasOwn(SPENDING_GROUPS, group)) { toast('Elige si el gasto es de casa, ocio o comida en la calle'); return; }
+    base.spendingGroup = group;
+  }
   if (editingTx?.budgetMonth && txType === 'gasto' && category === editingTx.category && f.date.value.startsWith(editingTx.budgetMonth)) base.budgetMonth = editingTx.budgetMonth;
   if (txType === 'transferencia') {
     if (f.account.value === f.to.value) { toast('Elige dos cuentas distintas'); return; }
@@ -2063,6 +2131,17 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'spendingLimitsForm') {
+    e.preventDefault();
+    const limits = {};
+    for (const key of ['casa', 'ocio', 'comida']) {
+      const value = e.target.elements.namedItem(key).value.trim();
+      limits[key] = value === '' ? null : Number(value.replace(',', '.'));
+      if (limits[key] !== null && (!Number.isFinite(limits[key]) || limits[key] < 0)) { toast('Usa montos positivos, 0 o deja el campo vacío'); return; }
+    }
+    data.settings = { ...data.settings, spendingLimits: limits, updatedAt: now() };
+    commit(); toast('Límites guardados'); return;
+  }
   if (e.target.id === 'bulkBudgetForm') {
     e.preventDefault();
     const pending = pendingBulkPayment, f = e.target;

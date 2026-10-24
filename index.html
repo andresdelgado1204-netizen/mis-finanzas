@@ -14,7 +14,7 @@
   <link rel="icon" href="icon.svg?v=3" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
   <script src="theme.js?v=22"></script>
-  <link rel="stylesheet" href="styles.css?v=56">
+  <link rel="stylesheet" href="styles.css?v=57">
 </head>
 <body>
   <header class="top">
@@ -47,7 +47,7 @@
     <form id="txForm" class="form">
       <h3 id="txTitle">Nuevo movimiento</h3>
       <div class="seg" id="txType">
-        <button type="button" data-type="gasto">Gasto ocio</button>
+        <button type="button" data-type="gasto">Gasto</button>
         <button type="button" data-type="ingreso">Ingreso</button>
         <button type="button" data-type="transferencia">Mover</button>
       </div>
@@ -61,6 +61,9 @@
       </div>
       <label id="catLabel">Categoría<select name="category" required></select></label>
       <label id="txNewCategoryWrap" hidden><span id="txNewCategoryTitle">Nombre del gasto</span><input name="newCategory" maxlength="60" placeholder="Ej. Veterinaria o Reparaciones" disabled></label>
+      <label id="spendingGroupWrap">¿Para qué fue este gasto?<select name="spendingGroup" required>
+        <option value="" disabled selected>Elige un grupo</option><option value="casa">🏠 Casa</option><option value="ocio">🎉 Ocio</option><option value="comida">🍽️ Comida en la calle</option><option value="otros">Sin clasificar / otros</option>
+      </select></label>
       <label class="check" id="reserveWrap" hidden><input name="separate" type="checkbox"> <span id="reserveText">💰 Separar para mis fondos</span></label>
       <label id="accField"><span id="accLabel">Pagado con</span><select name="account"></select></label>
       <label id="toLabel" hidden>Hacia<select name="to"></select></label>
@@ -266,6 +269,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js?v=15"></script>
-  <script src="app.js?v=69"></script>
+  <script src="app.js?v=70"></script>
 </body>
 </html>

@@ -997,3 +997,17 @@ body { font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sa
 .period-income .kv { font-size:.88rem; }
 .budget-due { margin:12px 0; display:grid; gap:6px; font-size:.85rem; color:var(--muted); }
 @media(max-width:380px) { .period-hero { padding:19px 15px; } .period-switch button { font-size:.8rem; } .clear-math b { white-space:normal; overflow-wrap:anywhere; text-align:right; } }
+
+/* Límites de casa, ocio semanal y comida en la calle. */
+.spending-plan { scroll-margin-top:90px; }
+.spending-suggestion { background:var(--accent-soft); padding:16px; border-radius:14px; }
+.spending-suggestion > span { display:block; font-size:.88rem; }
+.spending-suggestion > b { display:block; font-size:1.8rem; font-variant-numeric:tabular-nums; letter-spacing:-.03em; margin:5px 0; overflow-wrap:anywhere; }
+.spending-group { padding:16px 0; border-bottom:1px solid var(--line); }
+.spending-group .summary-head { flex-wrap:wrap; margin-bottom:8px; }
+.spending-group .summary-head > .muted { font-size:.78rem; margin:0; }
+.spending-group .kv { font-size:.9rem; }
+.spending-group .kv small { font-size:.8rem; color:var(--muted); font-weight:400; }
+.spending-config { padding-top:16px; }
+.spending-config summary { cursor:pointer; font-size:.9rem; font-weight:600; }
+.spending-config form { margin-top:16px; }

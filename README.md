@@ -57,3 +57,11 @@ Inicio permite cambiar entre Día, Semana (viernes a jueves según tu día de pa
 El dinero libre incluye saldos iniciales e ingresos recibidos hasta la fecha de referencia, menos gastos, ahorro reservado y gastos mensuales pendientes. No suma sueldos futuros. Las cuentas ocultas en «Mi dinero» siguen formando parte del total para no perder dinero al cambiar la preferencia visual. La sugerencia diaria se reparte hasta el final del período; en Día se reparte hasta el próximo pago. Los gastos mensuales pendientes se reservan completos en el cálculo y no se pagan automáticamente.
 
 Cada gasto mensual admite un día de vencimiento opcional (1–31), editable en sus opciones. En meses cortos, el día 29, 30 o 31 se ajusta al último día del mes. Antes de empezar se usa la fecha inicial, incluyendo los días anteriores al primer viernes.
+
+### Casa, ocio y comida en la calle
+
+Inicio muestra «Mis límites»: casa al mes, ocio por semana de pago y comida en la calle para una salida mensual. Todos empiezan sin definir; 0 es un límite válido y un campo vacío conserva el estado sin definir. Se configuran dentro de la tarjeta y se sincronizan en la cuenta.
+
+Los gastos ocasionales permiten elegir Casa, Ocio, Comida en la calle u Otros. Los pagos de gastos mensuales cuentan como Casa. Las categorías antiguas explícitas Ocio, Comida fuera, Casa, Vivienda, Cuentas y Supermercado se reconocen; no se adivina el grupo de los demás registros por su nombre. Se pueden revisar y clasificar editando el movimiento.
+
+La sugerencia semanal usa únicamente dinero recibido, protege el resto del límite de casa sin descontar otra vez las cuentas pendientes, y el resto del límite mensual de comida. Reparte el resto entre los días que quedan del mes y limita la sugerencia al remanente semanal de ocio, cuando está definido. Requiere definir los límites de casa y comida. Los límites no crean movimientos ni saldos separados. La comida se cuenta por días con gastos registrados para no considerar varias boletas del mismo día como distintas salidas.
