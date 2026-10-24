@@ -1130,3 +1130,50 @@ body:has(.essential-home) .fab { display:none; }
   .essential-metrics { gap:12px; }
   .essential-metrics b { font-size:1.05rem; }
 }
+.personal-agenda { max-width:960px; margin:0 auto; }
+.ag-header, .ag-row { display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; }
+.ag-header { margin:16px 0 24px; }
+.ag-header h2 { margin:0; font-weight:500; }
+.ag-caption { display:block; color:var(--muted); font-size:.82rem; line-height:1.6; margin:8px 0; overflow-wrap:anywhere; }
+.ag-tabs { margin-bottom:28px; }
+.ag-filter { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:.82rem; }
+.ag-filter input, .ag-filter select { min-height:44px; border:1px solid var(--line); border-radius:9px; padding:8px; background:var(--card); color:var(--text); }
+.ag-columns { display:grid; grid-template-columns:1fr 1fr; gap:28px; margin:24px 0; }
+.ag-columns > section { min-width:0; }
+.ag-slot { border-top:1px solid var(--line); padding:16px 0; display:grid; gap:6px; }
+.ag-slot > span { font-size:.85rem; color:var(--accent); font-variant-numeric:tabular-nums; }
+.ag-slot b, .ag-slot small { overflow-wrap:anywhere; }
+.ag-slot small { color:var(--muted); font-size:.82rem; }
+.ag-slot .slink { justify-self:start; text-align:left; }
+.ag-now { padding:14px 18px; border-radius:12px; background:var(--accent-soft); margin:16px 0; }
+.ag-now p { margin:8px 0; }
+.ag-job { border-top:1px solid var(--line); padding:20px 0; }
+.ag-job h3 { margin:8px 0; overflow-wrap:anywhere; }
+.ag-job p { overflow-wrap:anywhere; }
+.ag-job > p:not([class]) { font-size:.92rem; margin:8px 0; }
+.ag-status { color:var(--muted); font-size:.78rem; }
+.ag-running .ag-status { color:var(--accent); font-weight:600; }
+.ag-time { font-size:.88rem; font-variant-numeric:tabular-nums; }
+.ag-job-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.ag-job-actions .btn { min-height:44px; }
+.ag-more, .ag-config, .ag-personal-section { border-top:1px solid var(--line); padding-top:20px; margin-top:24px; }
+.ag-more summary, .ag-config summary { min-height:44px; cursor:pointer; }
+.ag-personal { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 0; border-bottom:1px solid var(--line); }
+.ag-personal b { font-size:.92rem; font-weight:500; overflow-wrap:anywhere; }
+.ag-personal .ag-job-actions { margin:0; }
+.ag-done > div:first-child { opacity:.65; }
+.ag-done b { text-decoration:line-through; }
+.ag-weekday { padding:20px 0; border-top:1px solid var(--line); }
+.ag-fields { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.ag-routine { border:1px solid var(--line); border-radius:12px; padding:14px; display:grid; gap:12px; min-width:0; }
+.ag-routine legend { font-size:.88rem; text-transform:capitalize; }
+.ag-error { color:var(--neg); font-size:.88rem; }
+.ag-error:empty { display:none; }
+.ag-footnote { margin:24px 0; }
+@media(max-width:600px) {
+  .ag-columns { grid-template-columns:1fr; gap:20px; }
+  .ag-header > .btn { width:100%; }
+  .ag-personal { align-items:flex-start; flex-direction:column; }
+  .ag-fields { grid-template-columns:1fr; }
+  .personal-agenda .ag-tabs button { font-size:.82rem; padding-inline:6px; }
+}

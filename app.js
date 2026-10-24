@@ -196,7 +196,7 @@ function restoreView(uid) {
   try {
     const saved = JSON.parse(sessionStorage.getItem('finanzas.view.' + uid) || 'null');
     if (!saved) return;
-    if (['inicio', 'movimientos', 'presupuesto', 'metas', 'ajustes', 'admin'].includes(saved.tab)) ui.tab = saved.tab;
+    if (['inicio', 'movimientos', 'presupuesto', 'metas', 'ajustes', 'admin', 'agenda'].includes(saved.tab)) ui.tab = saved.tab;
     if (/^\d{4}-(0[1-9]|1[0-2])$/.test(saved.month || '')) ui.month = saved.month;
     if (['todos', 'gasto', 'ingreso'].includes(saved.filter)) ui.filter = saved.filter;
   } catch { }
@@ -903,6 +903,8 @@ async function cloudInit() {
 }
 
 const isAdmin = () => !!(cloud.user && window.ADMIN_UID && cloud.user.uid === window.ADMIN_UID);
+// Esta función está habilitada únicamente para la cuenta solicitante.
+function hasPersonalAgenda() { return !ui.viewing && (cloud.user?.uid === 'QZUtAZZ7Jdac2LlAID4rDxv1jxg2' || !!window.PREVIEW_AGENDA && !!window.PREVIEW); }
 /* ---------- usuarios tipo "andres@finanzas" ----------
    Quien no usa correo elige un nombre de usuario. Por dentro se guarda con
    una dirección del propio proyecto Firebase (nadie más la controla). */
@@ -1699,6 +1701,8 @@ function render() {
   restoreLock();
   renderBrand();
   $('#adminTab').hidden = !showAdmin();
+  $('#agendaTab').hidden = !hasPersonalAgenda();
+  if (ui.tab === 'agenda' && !hasPersonalAgenda()) ui.tab = 'inicio';
   if (ui.tab === 'admin' && !showAdmin()) ui.tab = 'inicio';
   rememberView();
   document.querySelectorAll('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === ui.tab));
@@ -1706,7 +1710,7 @@ function render() {
   $('#monthLabel').textContent = monthLabel(ui.month);
   $('[data-action="prev-month"]').disabled = !!startMonth() && ui.month <= startMonth();
   $('#fab').hidden = !['inicio', 'movimientos'].includes(ui.tab);
-  $('#view').innerHTML = views[ui.tab]();
+  $('#view').innerHTML = ui.tab === 'agenda' ? renderPersonalAgenda() : views[ui.tab]();
   renderSyncStatus();
 }
 
@@ -1924,7 +1928,7 @@ function toast(msg) {
 /* ---------- eventos ---------- */
 document.addEventListener('click', e => {
   const tabEl = e.target.closest('[data-tab]');
-  if (tabEl) { e.preventDefault(); ui.tab = tabEl.dataset.tab; render(); window.scrollTo(0, 0); return; }
+  if (tabEl) { e.preventDefault(); if (tabEl.dataset.tab === 'agenda' && !hasPersonalAgenda()) return; ui.tab = tabEl.dataset.tab; render(); window.scrollTo(0, 0); return; }
   if (e.target.closest('[data-close]')) { e.target.closest('dialog').close(); return; }
   const el = e.target.closest('[data-action]');
   if (!el) return;
