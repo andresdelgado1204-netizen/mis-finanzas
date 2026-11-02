@@ -431,6 +431,27 @@ function pendingFixed(month = ui.month, asOf = '9999-12-31') {
     .map(c => ({ cat: c, amount: Math.max(0, budgetFor(c, month) - (spent[c] || 0)), budget: budgetFor(c, month), spent: spent[c] || 0, due: budgetDueDate(activeBudget(c, month), month) }))
     .filter(x => x.amount > 0).sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.cat.localeCompare(b.cat));
 }
+// Solo admin (pago semanal): cuánto separar de cada sueldo para cubrir los gastos mensuales
+function weeklyFixedPlan(month = ui.month) {
+  const total = budgetCats(month).reduce((s, c) => s + budgetFor(c, month), 0);
+  const pays = paydaysInMonth(month);
+  const ref = refDay();
+  let left = 0;
+  for (let d = firstPaydayFrom(month + '-01'); d.startsWith(month); d = addDays(d, 7)) if (d >= ref) left++;
+  const pending = pendingFixed(month).reduce((s, p) => s + p.amount, 0);
+  return { total, pays, perPay: pays ? Math.ceil(total / pays) : 0, left, pending, perLeft: left ? Math.ceil(pending / left) : 0, current: month === ref.slice(0, 7) };
+}
+function weeklyFixedCard(month = ui.month) {
+  if (!isAdmin()) return '';
+  const p = weeklyFixedPlan(month);
+  if (!(p.total > 0) || !p.pays) return '';
+  const day = DAYS[payday()];
+  const rest = p.current && p.pending > 0 && p.pending !== p.total
+    ? (p.left ? `<p class="mnote">Lo que falta pagar (${fmt(p.pending)}) sale a <b>${fmt(p.perLeft)}</b> en ${p.left === 1 ? `el ${esc(day)} que queda` : `los ${p.left} ${esc(day)}s que quedan`}.</p>`
+      : `<p class="mnote">Faltan ${fmt(p.pending)} y ya no quedan ${esc(day)}s de pago este mes.</p>`)
+    : '';
+  return `<div class="purchase-total weekly-fixed"><span>Separa de cada sueldo para tus gastos mensuales<small>${fmt(p.total)} ÷ ${p.pays} ${esc(day)}s de ${esc(monthLabel(month).split(' ')[0])}</small></span><b>${fmt(p.perPay)} por ${esc(day)}</b></div>${rest}`;
+}
 function budgetDueDate(b, month = ui.month) {
   const day = Number(b?.dueDay);
   if (!Number.isInteger(day) || day < 1 || day > 31) return '';
@@ -1534,7 +1555,7 @@ const views = {
     const budCard = `<section class="card">
         <div class="summary-head"><h3>Gastos mensuales</h3>${budTotal > 0 ? '<a href="#" data-tab="presupuesto">Ver todo</a>' : ''}</div>
         ${budTotal > 0 ? `<div class="kv"><span>Pagado</span><b>${fmt(budSpent)} <small>de ${fmt(budTotal)}</small></b></div>
-        ${progress(budSpent, budTotal)}` : '<p class="muted" style="margin:0">Anota tus gastos fijos, como arriendo o cuentas.</p>'}
+        ${progress(budSpent, budTotal)}${weeklyFixedCard()}` : '<p class="muted" style="margin:0">Anota tus gastos fijos, como arriendo o cuentas.</p>'}
         <button type="button" class="slink addbud" data-action="new-budget">+ Agregar gasto mensual</button>
       </section>`;
 
@@ -1604,7 +1625,7 @@ const views = {
       </div>`;
     }).join('');
     return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
-      <p class="muted">Planifica tus gastos fijos y márcalos como pagados.</p>${addBtn}${budgetBulkControl()}<div class="budget-items">${rows}</div></section>` + sixMonthsCard();
+      <p class="muted">Planifica tus gastos fijos y márcalos como pagados.</p>${weeklyFixedCard()}${addBtn}${budgetBulkControl()}<div class="budget-items">${rows}</div></section>` + sixMonthsCard();
   },
 
   metas() {
