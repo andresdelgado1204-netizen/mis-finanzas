@@ -1208,3 +1208,8 @@ body:has(.essential-home) .fab { display:none; }
 .weekly-fixed .wf-split { display: block; margin-top: 4px; font-weight: 600; opacity: .9; }
 .budget-way { display: block; margin: 2px 0 6px; color: var(--muted); font-size: .8rem; }
 @media (max-width: 360px) { .acc-free { grid-template-columns: 1fr; } }
+
+/* 🗓️ Separar esta semana */
+.weekly-save .reserve-grid { margin-top: 8px; }
+.weekly-save select { width: 100%; }
+.weekly-hist { margin-top: 8px; }

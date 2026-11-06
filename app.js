@@ -257,10 +257,11 @@ function reservedAmounts(txs = live(data.transactions)) {
     if (t.type === 'ingreso' && t.reserves) {
       out.emergency += roundSave(t.reserves.emergency);
       out.savings += roundSave(t.reserves.savings);
+      out.goals += Object.values(t.reserves.goals || {}).reduce((n, v) => n + (Number(v) || 0), 0);
     }
-    out.total = out.emergency + out.savings;
+    out.total = out.emergency + out.savings + out.goals;
     return out;
-  }, { emergency: 0, savings: 0, total: 0 });
+  }, { emergency: 0, savings: 0, goals: 0, total: 0 });
 }
 function occasionalExpenses(month = ui.month) {
   return txOfMonth(month).filter(t => t.type === 'gasto' && !t.budgetMonth)
@@ -275,6 +276,39 @@ function occasionalHomeCard() {
     ${expenses.length ? `<details class="occasional-details"><summary>Ver detalle (${expenses.length})</summary>
       <ul class="txlist">${expenses.map(t => txRow(t).replace('</small>', ` · ${esc(fmtDate(t.date))}</small>`)).join('')}</ul>
     </details>` : '<p class="muted">Sin movimientos este mes</p>'}
+  </section>`;
+}
+// 🗓️ Cada semana: cuánto separo para emergencia, ahorro y mi meta (se va sumando)
+function weekSalary(ws) {
+  const we = addDays(ws, 6), marked = new Set(data.settings.reserveCats || []);
+  const list = live(data.transactions).filter(t => t.type === 'ingreso' && t.date >= ws && t.date <= we && (t.reserves || marked.has(t.category) || t.category === 'Sueldo'));
+  return list.sort((a, b) => (b.reserves ? 1 : 0) - (a.reserves ? 1 : 0) || b.amount - a.amount)[0] || null;
+}
+function weekSaveTotal(t) { if (!t || !t.reserves) return 0; return roundSave(t.reserves.emergency) + roundSave(t.reserves.savings) + Object.values(t.reserves.goals || {}).reduce((n, v) => n + (Number(v) || 0), 0); }
+function weeklySaveCard() {
+  const ws = weekStart(refDay()), we = addDays(ws, 6), sal = weekSalary(ws), r = sal && sal.reserves || {};
+  const goals = live(data.goals).filter(g => g.kind !== 'deuda');
+  const gid = Object.keys(r.goals || {})[0] || data.settings.homeGoal || (goals[0] || {}).id || '';
+  const saved = reservedAmounts();
+  const hist = live(data.transactions).filter(t => t.type === 'ingreso' && t.reserves && weekSaveTotal(t) > 0).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
+  const form = sal ? `<form id="weeklySaveForm" class="form" data-tx="${esc(sal.id)}">
+      <div class="reserve-grid">
+        <label>🛟 Emergencia<input name="emergency" type="number" min="0" step="1" inputmode="numeric" value="${roundSave(r.emergency) || ''}" placeholder="$0"></label>
+        <label>🌱 Ahorro<input name="savings" type="number" min="0" step="1" inputmode="numeric" value="${roundSave(r.savings) || ''}" placeholder="$0"></label>
+      </div>
+      ${goals.length ? `<div class="reserve-grid">
+        <label>🎯 Meta<select name="goal">${goals.map(g => `<option value="${esc(g.id)}" ${g.id === gid ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select></label>
+        <label>Monto para la meta<input name="goalAmount" type="number" min="0" step="1" inputmode="numeric" value="${(r.goals || {})[gid] || ''}" placeholder="$0"></label>
+      </div>` : ''}
+      <p class="muted">Del sueldo de ${esc(shortDay(sal.date))} (${fmt(sal.amount)}). Lo que separes se descuenta del dinero libre y se suma a tus fondos.</p>
+      <button class="btn wide">Guardar lo de esta semana</button></form>`
+    : `<p class="muted">Primero registra el sueldo de esta semana; después anota cuánto separas.</p><button type="button" class="btn" data-action="essential-income">Agregar ingreso</button>`;
+  return `<section class="card weekly-save"><h3>🗓️ Separar esta semana</h3>
+    <p class="muted">${esc(shortDay(ws))} – ${esc(shortDay(we))} · Elige cuánto separas cada semana; se va sumando.</p>
+    ${form}
+    <div class="kv ftotal"><span>💰 Total separado</span><b>${fmt(saved.total)}</b></div>
+    <p class="mnote fsplit">🛟 Emergencia ${fmt(saved.emergency)} · 🌱 Ahorro ${fmt(saved.savings)}${saved.goals ? ` · 🎯 Metas ${fmt(saved.goals)}` : ''}</p>
+    ${hist.length ? `<details class="weekly-hist"><summary>Ver semanas (${hist.length})</summary><ul class="paylist">${hist.map(t => `<li><span>${esc(shortDay(weekStart(t.date)))}<small class="payof">🛟 ${fmt(roundSave(t.reserves.emergency))} · 🌱 ${fmt(roundSave(t.reserves.savings))}${Object.values(t.reserves.goals || {}).some(v => v > 0) ? ` · 🎯 ${fmt(Object.values(t.reserves.goals).reduce((n, v) => n + (Number(v) || 0), 0))}` : ''}</small></span><b>${fmt(weekSaveTotal(t))}</b></li>`).join('')}</ul></details>` : ''}
   </section>`;
 }
 function reservesCard() {
@@ -562,7 +596,7 @@ function homeAvailable(range = homePeriodRange()) {
         else if (t.type === 'transferencia') { if (ids.has(t.from)) bal[t.from] -= t.amount; if (ids.has(t.to)) bal[t.to] += t.amount; }
       }
       const res = {};
-      for (const t of txs) if (t.type === 'ingreso' && t.reserves && ids.has(accId(t))) res[accId(t)] = (res[accId(t)] || 0) + roundSave(t.reserves.emergency) + roundSave(t.reserves.savings);
+      for (const t of txs) if (t.type === 'ingreso' && t.reserves && ids.has(accId(t))) res[accId(t)] = (res[accId(t)] || 0) + roundSave(t.reserves.emergency) + roundSave(t.reserves.savings) + Object.values(t.reserves.goals || {}).reduce((n, v) => n + (Number(v) || 0), 0);
       const cashAll = pending.reduce((n, p) => n + pendingSplit(p, ui.month, asOf).cash, 0);
       const cashRes = weeklyShare ? Math.min(cashAll, Math.ceil(cashAll / weeklyShare.left) * weeklyShare.n, pendingTotal) : cashAll;
       const debitRes = Math.max(0, pendingTotal - cashRes);
@@ -1674,7 +1708,7 @@ const views = {
       ${fold('Mis cuentas', money)}
       ${fold('Detalle del período', homePeriodCard() + spendCard)}
       ${fold('Próximas cuentas y gastos mensuales', clarityCard() + budCard)}
-      ${goalsCard ? fold('Mis metas y fondos', goalsCard) : ''}
+      ${fold('Mis metas y fondos', weeklySaveCard() + (goalsCard || ''))}
       ${guide ? fold('Preparar mi inicio', guide) : ''}
     </div></div>`;
   },
@@ -1729,7 +1763,7 @@ const views = {
 
   metas() {
     const goals = live(data.goals).filter(g => g.kind !== 'compra');
-    return purchasesCard() + reservesCard() + `<div class="summary-head section-head"><h3>Metas y deudas</h3><button class="slink" data-action="new-goal">+ Nueva</button></div>
+    return weeklySaveCard() + purchasesCard() + reservesCard() + `<div class="summary-head section-head"><h3>Metas y deudas</h3><button class="slink" data-action="new-goal">+ Nueva</button></div>
       ${goals.length ? goals.map((g, i) => {
         const on = (goals.find(x => x.id === data.settings.homeGoal) || goals[0]).id === g.id;
         return `<section class="card">${goalRow(g, true)}<button type="button" class="pinhome ${on ? 'on' : ''}" data-action="home-goal" data-id="${g.id}" aria-pressed="${on}">${on ? '★ Se muestra en Inicio' : '☆ Mostrar en Inicio'}</button></section>`;
@@ -1930,7 +1964,7 @@ function txRow(t) {
     amount = (t.type === 'ingreso' ? '+' : '−') + fmt(t.amount); cls = t.type === 'ingreso' ? 'pos' : 'neg';
   }
   if (t.type === 'gasto') sub += ' · ' + esc(SPENDING_GROUPS[spendingGroup(t)]);
-  if (t.reserves && t.type === 'ingreso') sub += ` · Emergencia ${fmt(t.reserves.emergency)} · Ahorro ${fmt(t.reserves.savings)}`;
+  if (t.reserves && t.type === 'ingreso') { const gs = Object.values(t.reserves.goals || {}).reduce((n, v) => n + (Number(v) || 0), 0); sub += ` · Emergencia ${fmt(t.reserves.emergency)} · Ahorro ${fmt(t.reserves.savings)}${gs ? ` · Meta ${fmt(gs)}` : ''}`; }
   const color = t.type === 'transferencia' || t.type === 'ajuste' ? 'var(--muted)' : catColor(t.category);
   return `<li data-action="edit-tx" data-id="${t.id}">
     <i style="background:${color}"></i>
@@ -2287,7 +2321,7 @@ $('#txForm').addEventListener('submit', e => {
       try { localStorage.setItem('finanzas.ultimoMetodo', payMethod); } catch { }
     } else rememberAccount(account);
     if (txType === 'ingreso' && f.separate.checked && !$('#reserveWrap').hidden) {
-      base.reserves = salaryReserves(amount, editingTx?.reserves?.rates || reserveRates());
+      base.reserves = editingTx?.reserves?.manual ? editingTx.reserves : salaryReserves(amount, editingTx?.reserves?.rates || reserveRates());
     }
     if (txType === 'ingreso' && !$('#reserveWrap').hidden) {
       // se recuerda la elección para la próxima vez con esta categoría
@@ -2368,6 +2402,24 @@ $('#goalDelete').addEventListener('click', () => {
   ask('¿Eliminar esta meta?', 'Eliminar').then(ok => { if (ok) remove('goals', id); });
 });
 
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'weeklySaveForm') return;
+  e.preventDefault();
+  const f = e.target, i = data.transactions.findIndex(t => t.id === f.dataset.tx && !t.deleted);
+  if (i < 0) { toast('No encontré el sueldo de esta semana'); return; }
+  const t = data.transactions[i], old = t.reserves || {}, emergency = roundSave(parseAmount(f.emergency.value)), savings = roundSave(parseAmount(f.savings.value));
+  const goals = {}; if (f.goal && f.goal.value) { const v = Math.round(parseAmount(f.goalAmount.value)); if (v > 0) goals[f.goal.value] = v; }
+  const total = emergency + savings + Object.values(goals).reduce((n, v) => n + v, 0);
+  if (total > t.amount) { toast(`Lo que separas (${fmt(total)}) supera el sueldo de ${fmt(t.amount)}`); return; }
+  const stamp = now();
+  for (const id of new Set([...Object.keys(old.goals || {}), ...Object.keys(goals)])) {
+    const delta = (goals[id] || 0) - ((old.goals || {})[id] || 0), gi = data.goals.findIndex(g => g.id === id && !g.deleted);
+    if (delta && gi >= 0) data.goals[gi] = Object.assign({}, data.goals[gi], { current: Math.max(0, (data.goals[gi].current || 0) + delta), updatedAt: stamp });
+  }
+  data.transactions[i] = Object.assign({}, t, { reserves: { emergency, savings, goals, rates: old.rates || reserveRates(), manual: true }, updatedAt: stamp });
+  commit();
+  toast(`Esta semana separas ${fmt(total)}. Total separado: ${fmt(reservedAmounts().total)}`);
+});
 $('#contribForm').addEventListener('submit', e => {
   e.preventDefault();
   const f = e.target;
