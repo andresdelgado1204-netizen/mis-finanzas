@@ -444,6 +444,7 @@ function weeklyFixedPlan(month = ui.month) {
   return { total, pays, left, pending, paid: Math.max(0, total - pending), perLeft: left ? Math.ceil(pending / left) : 0,
     current: month === refMonth, past: month < refMonth };
 }
+function dayPl(d) { return /s$/.test(d) ? d : d + 's'; }
 function weeklyFixedCard(month = ui.month) {
   if (!isAdmin()) return '';
   const p = weeklyFixedPlan(month);
@@ -454,9 +455,9 @@ function weeklyFixedCard(month = ui.month) {
   }
   const paidNote = p.paid > 0 ? ` · ya pagaste ${fmt(p.paid)} de ${fmt(p.total)}` : '';
   if (!p.left) {
-    return `<div class="purchase-total weekly-fixed"><span>Por pagar de tus gastos mensuales<small>No quedan ${esc(day)}s de pago en ${mon}${paidNote}</small></span><b>${fmt(p.pending)}</b></div>`;
+    return `<div class="purchase-total weekly-fixed"><span>Por pagar de tus gastos mensuales<small>No quedan ${esc(dayPl(day))} de pago en ${mon}${paidNote}</small></span><b>${fmt(p.pending)}</b></div>`;
   }
-  const quedan = p.left === p.pays ? `${p.left} ${esc(day)}s de ${mon}` : (p.left === 1 ? `1 ${esc(day)} que queda` : `${p.left} ${esc(day)}s que quedan`);
+  const quedan = p.left === p.pays ? `${p.left} ${esc(dayPl(day))} de ${mon}` : (p.left === 1 ? `1 ${esc(day)} que queda` : `${p.left} ${esc(dayPl(day))} que quedan`);
   return `<div class="purchase-total weekly-fixed"><span>Separa de cada sueldo para tus gastos mensuales<small>${fmt(p.pending)} por pagar ÷ ${quedan}${paidNote}</small></span><b>${fmt(p.perLeft)} por ${esc(day)}</b></div>`;
 }
 // Resumen del mes: total de gastos mensuales (pagado / por pagar) más los extras (gastos fuera de los mensuales)
