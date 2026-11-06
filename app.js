@@ -431,26 +431,33 @@ function pendingFixed(month = ui.month, asOf = '9999-12-31') {
     .map(c => ({ cat: c, amount: Math.max(0, budgetFor(c, month) - (spent[c] || 0)), budget: budgetFor(c, month), spent: spent[c] || 0, due: budgetDueDate(activeBudget(c, month), month) }))
     .filter(x => x.amount > 0).sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.cat.localeCompare(b.cat));
 }
-// Solo admin (pago semanal): cuánto separar de cada sueldo para cubrir los gastos mensuales
+// Solo admin (pago semanal): cuánto separar de cada sueldo para cubrir los gastos mensuales.
+// Lo ya pagado se descuenta: se reparte solo lo pendiente entre los días de pago que quedan.
 function weeklyFixedPlan(month = ui.month) {
   const total = budgetCats(month).reduce((s, c) => s + budgetFor(c, month), 0);
   const pays = paydaysInMonth(month);
-  const ref = refDay();
+  const ref = refDay(), refMonth = ref.slice(0, 7);
   let left = 0;
   for (let d = firstPaydayFrom(month + '-01'); d.startsWith(month); d = addDays(d, 7)) if (d >= ref) left++;
+  if (month > refMonth) left = pays; // mes futuro: quedan todos
   const pending = pendingFixed(month).reduce((s, p) => s + p.amount, 0);
-  return { total, pays, perPay: pays ? Math.ceil(total / pays) : 0, left, pending, perLeft: left ? Math.ceil(pending / left) : 0, current: month === ref.slice(0, 7) };
+  return { total, pays, left, pending, paid: Math.max(0, total - pending), perLeft: left ? Math.ceil(pending / left) : 0,
+    current: month === refMonth, past: month < refMonth };
 }
 function weeklyFixedCard(month = ui.month) {
   if (!isAdmin()) return '';
   const p = weeklyFixedPlan(month);
   if (!(p.total > 0) || !p.pays) return '';
-  const day = DAYS[payday()];
-  const rest = p.current && p.pending > 0 && p.pending !== p.total
-    ? (p.left ? `<p class="mnote">Lo que falta pagar (${fmt(p.pending)}) sale a <b>${fmt(p.perLeft)}</b> en ${p.left === 1 ? `el ${esc(day)} que queda` : `los ${p.left} ${esc(day)}s que quedan`}.</p>`
-      : `<p class="mnote">Faltan ${fmt(p.pending)} y ya no quedan ${esc(day)}s de pago este mes.</p>`)
-    : '';
-  return `<div class="purchase-total weekly-fixed"><span>Separa de cada sueldo para tus gastos mensuales<small>${fmt(p.total)} ÷ ${p.pays} ${esc(day)}s de ${esc(monthLabel(month).split(' ')[0])}</small></span><b>${fmt(p.perPay)} por ${esc(day)}</b></div>${rest}`;
+  const day = DAYS[payday()], mon = esc(monthLabel(month).split(' ')[0]);
+  if (!(p.pending > 0)) {
+    return `<div class="purchase-total weekly-fixed"><span>Gastos mensuales de ${mon}<small>${fmt(p.total)} pagados</small></span><b>Todo pagado ✓</b></div>`;
+  }
+  const paidNote = p.paid > 0 ? ` · ya pagaste ${fmt(p.paid)} de ${fmt(p.total)}` : '';
+  if (!p.left) {
+    return `<div class="purchase-total weekly-fixed"><span>Por pagar de tus gastos mensuales<small>No quedan ${esc(day)}s de pago en ${mon}${paidNote}</small></span><b>${fmt(p.pending)}</b></div>`;
+  }
+  const quedan = p.left === p.pays ? `${p.left} ${esc(day)}s de ${mon}` : (p.left === 1 ? `1 ${esc(day)} que queda` : `${p.left} ${esc(day)}s que quedan`);
+  return `<div class="purchase-total weekly-fixed"><span>Separa de cada sueldo para tus gastos mensuales<small>${fmt(p.pending)} por pagar ÷ ${quedan}${paidNote}</small></span><b>${fmt(p.perLeft)} por ${esc(day)}</b></div>`;
 }
 function budgetDueDate(b, month = ui.month) {
   const day = Number(b?.dueDay);
