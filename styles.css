@@ -1192,3 +1192,7 @@ body:has(.essential-home) .fab { display:none; }
   .ag-fields { grid-template-columns:1fr; }
   .personal-agenda .ag-tabs button { font-size:.82rem; padding-inline:6px; }
 }
+
+.budget-totals { margin:12px 0 4px; padding:14px 16px 4px; border-radius:16px; background:var(--card2, rgba(127,127,127,.08)); }
+.budget-totals-sum { border-top:1px solid rgba(127,127,127,.25); padding-top:10px; }
+.budget-totals-sum span, .budget-totals-sum b { color:var(--text); font-weight:650; }

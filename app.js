@@ -459,6 +459,21 @@ function weeklyFixedCard(month = ui.month) {
   const quedan = p.left === p.pays ? `${p.left} ${esc(day)}s de ${mon}` : (p.left === 1 ? `1 ${esc(day)} que queda` : `${p.left} ${esc(day)}s que quedan`);
   return `<div class="purchase-total weekly-fixed"><span>Separa de cada sueldo para tus gastos mensuales<small>${fmt(p.pending)} por pagar ÷ ${quedan}${paidNote}</small></span><b>${fmt(p.perLeft)} por ${esc(day)}</b></div>`;
 }
+// Resumen del mes: total de gastos mensuales (pagado / por pagar) más los extras (gastos fuera de los mensuales)
+function budgetTotalsCard(month = ui.month) {
+  const cats = budgetCats(month);
+  const total = cats.reduce((s, c) => s + budgetFor(c, month), 0);
+  const pending = pendingFixed(month).reduce((s, p) => s + p.amount, 0);
+  const extras = txOfMonth(month).filter(t => t.type === 'gasto' && !cats.includes(t.category)).reduce((s, t) => s + t.amount, 0);
+  if (!(total > 0) && !(extras > 0)) return '';
+  return `<div class="budget-totals">
+    <div class="kv"><span>Total gastos mensuales</span><b>${fmt(total)}</b></div>
+    <div class="kv"><span>Ya pagado</span><b>${fmt(Math.max(0, total - pending))}</b></div>
+    <div class="kv"><span>Por pagar</span><b>${fmt(pending)}</b></div>
+    <div class="kv"><span>Extras del mes <small>(gastos ocasionales)</small></span><b>${fmt(extras)}</b></div>
+    <div class="kv budget-totals-sum"><span>Total del mes (mensuales + extras)</span><b>${fmt(total + extras)}</b></div>
+  </div>`;
+}
 function budgetDueDate(b, month = ui.month) {
   const day = Number(b?.dueDay);
   if (!Number.isInteger(day) || day < 1 || day > 31) return '';
@@ -1632,7 +1647,7 @@ const views = {
       </div>`;
     }).join('');
     return `<section class="card budget-panel"><h3>Gastos mensuales</h3>
-      <p class="muted">Planifica tus gastos fijos y márcalos como pagados.</p>${weeklyFixedCard()}${addBtn}${budgetBulkControl()}<div class="budget-items">${rows}</div></section>` + sixMonthsCard();
+      <p class="muted">Planifica tus gastos fijos y márcalos como pagados.</p>${weeklyFixedCard()}${budgetTotalsCard()}${addBtn}${budgetBulkControl()}<div class="budget-items">${rows}</div></section>` + sixMonthsCard();
   },
 
   metas() {
