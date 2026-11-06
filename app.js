@@ -257,11 +257,10 @@ function reservedAmounts(txs = live(data.transactions)) {
     if (t.type === 'ingreso' && t.reserves) {
       out.emergency += roundSave(t.reserves.emergency);
       out.savings += roundSave(t.reserves.savings);
-      out.goals += Object.values(t.reserves.goals || {}).reduce((n, v) => n + (Number(v) || 0), 0);
     }
-    out.total = out.emergency + out.savings + out.goals;
+    out.total = out.emergency + out.savings;
     return out;
-  }, { emergency: 0, savings: 0, goals: 0, total: 0 });
+  }, { emergency: 0, savings: 0, total: 0 });
 }
 function occasionalExpenses(month = ui.month) {
   return txOfMonth(month).filter(t => t.type === 'gasto' && !t.budgetMonth)
@@ -284,26 +283,20 @@ function weekSalaries(ws) {
   return live(data.transactions).filter(t => t.type === 'ingreso' && t.date >= ws && t.date <= we && (t.reserves || marked.has(t.category) || t.category === 'Sueldo')).sort((a, b) => b.amount - a.amount);
 }
 function weekSalary(ws) { return weekSalaries(ws)[0] || null; }
-function weekSaveTotal(t) { if (!t || !t.reserves) return 0; return roundSave(t.reserves.emergency) + roundSave(t.reserves.savings) + Object.values(t.reserves.goals || {}).reduce((n, v) => n + (Number(v) || 0), 0); }
+function weekSaveTotal(t) { if (!t || !t.reserves) return 0; return roundSave(t.reserves.emergency) + roundSave(t.reserves.savings); }
 function weeklySaveCard() {
-  const ws = weekStart(refDay()), we = addDays(ws, 6), sals = weekSalaries(ws), sal = sals[0] || null, r = { emergency: 0, savings: 0, goals: {} };
-  for (const t of sals) { const x = t.reserves || {}; r.emergency += roundSave(x.emergency); r.savings += roundSave(x.savings); for (const [k, v] of Object.entries(x.goals || {})) r.goals[k] = (r.goals[k] || 0) + (Number(v) || 0); }
+  const ws = weekStart(refDay()), we = addDays(ws, 6), sals = weekSalaries(ws), sal = sals[0] || null, r = { emergency: 0, savings: 0 };
+  for (const t of sals) { const x = t.reserves || {}; r.emergency += roundSave(x.emergency); r.savings += roundSave(x.savings); }
   const weekIncome = sals.reduce((n, t) => n + t.amount, 0);
-  const goals = live(data.goals).filter(g => g.kind !== 'deuda');
-  const gid = Object.keys(r.goals || {})[0] || data.settings.homeGoal || (goals[0] || {}).id || '';
   const saved = reservedAmounts();
   const hm = new Map();
-  for (const t of live(data.transactions)) { if (t.type !== 'ingreso' || !t.reserves || !(weekSaveTotal(t) > 0)) continue; const k = weekStart(t.date), x = hm.get(k) || { ws: k, e: 0, s: 0, g: 0 }; x.e += roundSave(t.reserves.emergency); x.s += roundSave(t.reserves.savings); x.g += Object.values(t.reserves.goals || {}).reduce((n, v) => n + (Number(v) || 0), 0); hm.set(k, x); }
+  for (const t of live(data.transactions)) { if (t.type !== 'ingreso' || !t.reserves || !(weekSaveTotal(t) > 0)) continue; const k = weekStart(t.date), x = hm.get(k) || { ws: k, e: 0, s: 0, g: 0 }; x.e += roundSave(t.reserves.emergency); x.s += roundSave(t.reserves.savings); hm.set(k, x); }
   const hist = [...hm.values()].sort((a, b) => b.ws.localeCompare(a.ws)).slice(0, 8);
   const form = sal ? `<form id="weeklySaveForm" class="form" data-tx="${esc(sal.id)}" data-week="${esc(ws)}">
       <div class="reserve-grid">
         <label>🛟 Emergencia<input name="emergency" type="number" min="0" step="1" inputmode="numeric" value="${roundSave(r.emergency) || ''}" placeholder="$0"></label>
         <label>🌱 Ahorro<input name="savings" type="number" min="0" step="1" inputmode="numeric" value="${roundSave(r.savings) || ''}" placeholder="$0"></label>
       </div>
-      ${goals.length ? `<div class="reserve-grid">
-        <label>🎯 Meta<select name="goal">${goals.map(g => `<option value="${esc(g.id)}" ${g.id === gid ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select></label>
-        <label>Monto para la meta<input name="goalAmount" type="number" min="0" step="1" inputmode="numeric" value="${(r.goals || {})[gid] || ''}" placeholder="$0"></label>
-      </div>` : ''}
       <p class="muted">${sals.length > 1 ? `De los ingresos de esta semana (${fmt(weekIncome)})` : `Del sueldo de ${esc(shortDay(sal.date))} (${fmt(sal.amount)})`}. Lo que separes se descuenta del dinero libre y se suma a tus fondos.</p>
       <button class="btn wide">Guardar lo de esta semana</button></form>`
     : `<p class="muted">Primero registra el sueldo de esta semana; después anota cuánto separas.</p><button type="button" class="btn" data-action="essential-income">Agregar ingreso</button>`;
@@ -311,8 +304,8 @@ function weeklySaveCard() {
     <p class="muted">${esc(shortDay(ws))} – ${esc(shortDay(we))} · Elige cuánto separas cada semana; se va sumando.</p>
     ${form}
     <div class="kv ftotal"><span>💰 Total separado</span><b>${fmt(saved.total)}</b></div>
-    <p class="mnote fsplit">🛟 Emergencia ${fmt(saved.emergency)} · 🌱 Ahorro ${fmt(saved.savings)}${saved.goals ? ` · 🎯 Metas ${fmt(saved.goals)}` : ''}</p>
-    ${hist.length ? `<details class="weekly-hist"><summary>Ver semanas (${hist.length})</summary><ul class="paylist">${hist.map(x => `<li><span>Semana del ${esc(shortDay(x.ws))}<small class="payof">🛟 ${fmt(x.e)} · 🌱 ${fmt(x.s)}${x.g ? ` · 🎯 ${fmt(x.g)}` : ''}</small></span><b>${fmt(x.e + x.s + x.g)}</b></li>`).join('')}</ul></details>` : ''}
+    <p class="mnote fsplit">🛟 Emergencia ${fmt(saved.emergency)} · 🌱 Ahorro ${fmt(saved.savings)}</p>
+    ${hist.length ? `<details class="weekly-hist"><summary>Ver semanas (${hist.length})</summary><ul class="paylist">${hist.map(x => `<li><span>Semana del ${esc(shortDay(x.ws))}<small class="payof">🛟 ${fmt(x.e)} · 🌱 ${fmt(x.s)}</small></span><b>${fmt(x.e + x.s)}</b></li>`).join('')}</ul></details>` : ''}
   </section>`;
 }
 function reservesCard() {
@@ -600,7 +593,7 @@ function homeAvailable(range = homePeriodRange()) {
         else if (t.type === 'transferencia') { if (ids.has(t.from)) bal[t.from] -= t.amount; if (ids.has(t.to)) bal[t.to] += t.amount; }
       }
       const res = {};
-      for (const t of txs) if (t.type === 'ingreso' && t.reserves && ids.has(accId(t))) res[accId(t)] = (res[accId(t)] || 0) + roundSave(t.reserves.emergency) + roundSave(t.reserves.savings) + Object.values(t.reserves.goals || {}).reduce((n, v) => n + (Number(v) || 0), 0);
+      for (const t of txs) if (t.type === 'ingreso' && t.reserves && ids.has(accId(t))) res[accId(t)] = (res[accId(t)] || 0) + roundSave(t.reserves.emergency) + roundSave(t.reserves.savings);
       const cashAll = pending.reduce((n, p) => n + pendingSplit(p, ui.month, asOf).cash, 0);
       const cashRes = weeklyShare ? Math.min(cashAll, Math.ceil(cashAll / weeklyShare.left) * weeklyShare.n, pendingTotal) : cashAll;
       const debitRes = Math.max(0, pendingTotal - cashRes);
@@ -1968,7 +1961,7 @@ function txRow(t) {
     amount = (t.type === 'ingreso' ? '+' : '−') + fmt(t.amount); cls = t.type === 'ingreso' ? 'pos' : 'neg';
   }
   if (t.type === 'gasto') sub += ' · ' + esc(SPENDING_GROUPS[spendingGroup(t)]);
-  if (t.reserves && t.type === 'ingreso') { const gs = Object.values(t.reserves.goals || {}).reduce((n, v) => n + (Number(v) || 0), 0); sub += ` · Emergencia ${fmt(t.reserves.emergency)} · Ahorro ${fmt(t.reserves.savings)}${gs ? ` · Meta ${fmt(gs)}` : ''}`; }
+  if (t.reserves && t.type === 'ingreso') sub += ` · Emergencia ${fmt(t.reserves.emergency)} · Ahorro ${fmt(t.reserves.savings)}`;
   const color = t.type === 'transferencia' || t.type === 'ajuste' ? 'var(--muted)' : catColor(t.category);
   return `<li data-action="edit-tx" data-id="${t.id}">
     <i style="background:${color}"></i>
@@ -2412,20 +2405,13 @@ document.addEventListener('submit', e => {
   const f = e.target, i = data.transactions.findIndex(t => t.id === f.dataset.tx && !t.deleted);
   if (i < 0) { toast('No encontré el sueldo de esta semana'); return; }
   const others = weekSalaries(f.dataset.week || weekStart(data.transactions[i].date)).filter(x => x.id !== f.dataset.tx);
-  const t = data.transactions[i], old = { goals: {} };
-  for (const x of [t, ...others]) for (const [k, v] of Object.entries((x.reserves || {}).goals || {})) old.goals[k] = (old.goals[k] || 0) + (Number(v) || 0);
-  old.rates = (t.reserves || {}).rates;
+  const t = data.transactions[i], old = { rates: (t.reserves || {}).rates };
   const weekIncome = [t, ...others].reduce((n, x) => n + x.amount, 0), emergency = roundSave(parseAmount(f.emergency.value)), savings = roundSave(parseAmount(f.savings.value));
-  const goals = {}; if (f.goal && f.goal.value) { const v = Math.round(parseAmount(f.goalAmount.value)); if (v > 0) goals[f.goal.value] = v; }
-  const total = emergency + savings + Object.values(goals).reduce((n, v) => n + v, 0);
+  const total = emergency + savings;
   if (total > weekIncome) { toast(`Lo que separas (${fmt(total)}) supera lo que recibiste esta semana (${fmt(weekIncome)})`); return; }
   const stamp = now();
-  for (const id of new Set([...Object.keys(old.goals || {}), ...Object.keys(goals)])) {
-    const delta = (goals[id] || 0) - ((old.goals || {})[id] || 0), gi = data.goals.findIndex(g => g.id === id && !g.deleted);
-    if (delta && gi >= 0) data.goals[gi] = Object.assign({}, data.goals[gi], { current: Math.max(0, (data.goals[gi].current || 0) + delta), updatedAt: stamp });
-  }
-  data.transactions[i] = Object.assign({}, t, { reserves: { emergency, savings, goals, rates: old.rates || reserveRates(), manual: true }, updatedAt: stamp });
-  for (const x of others) { const j = data.transactions.findIndex(y => y.id === x.id); if (j >= 0 && data.transactions[j].reserves) data.transactions[j] = Object.assign({}, data.transactions[j], { reserves: { emergency: 0, savings: 0, goals: {}, rates: data.transactions[j].reserves.rates || reserveRates(), manual: true }, updatedAt: stamp }); }
+  data.transactions[i] = Object.assign({}, t, { reserves: { emergency, savings, rates: old.rates || reserveRates(), manual: true }, updatedAt: stamp });
+  for (const x of others) { const j = data.transactions.findIndex(y => y.id === x.id); if (j >= 0 && data.transactions[j].reserves) data.transactions[j] = Object.assign({}, data.transactions[j], { reserves: { emergency: 0, savings: 0, rates: data.transactions[j].reserves.rates || reserveRates(), manual: true }, updatedAt: stamp }); }
   commit();
   toast(`Esta semana separas ${fmt(total)}. Total separado: ${fmt(reservedAmounts().total)}`);
 });
