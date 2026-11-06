@@ -581,6 +581,20 @@ function homeAvailable(range = homePeriodRange()) {
       }
     }
   } catch (_) {}
+  // 🛍️ Compras planeadas (metas de compra): se reserva lo que toca ahorrar en este pago
+  let purchaseRes = 0;
+  try {
+    if (!range.historical && !range.future) {
+      const ref = range.date, monthView = range.title === 'Este mes';
+      for (const g of live(data.goals).filter(g => g.kind === 'compra')) {
+        const pl = purchasePlan(g, weekStart(ref));
+        if (!(pl.weekly > 0)) continue;
+        let n = 1;
+        if (monthView) { n = 0; for (let d = weekStart(ref); d.startsWith(ui.month) || d < ui.month + '-01'; d = addDays(d, 7)) if (d <= g.deadline && d.slice(0, 7) <= ui.month) n++; n = Math.max(1, Math.min(n, pl.pays)); }
+        purchaseRes += Math.min(pl.missing, pl.weekly * n);
+      }
+    }
+  } catch (_) { purchaseRes = 0; }
   // por cuenta: efectivo y banco (débito)
   let byAcc = null;
   try {
@@ -599,9 +613,10 @@ function homeAvailable(range = homePeriodRange()) {
       const debitRes = Math.max(0, pendingTotal - cashRes);
       byAcc = allAccounts().map(a => { const pend = a.id === ca ? cashRes : a.id === da ? debitRes : 0, r = res[a.id] || 0;
         return { id: a.id, name: a.name, icon: accIcon(a), total: bal[a.id] || 0, reserved: r, pend, free: (bal[a.id] || 0) - r - pend }; });
+      if (purchaseRes > 0) { const tgt = byAcc.find(a => a.id === ca) || byAcc[0]; if (tgt) { tgt.buy = purchaseRes; tgt.free -= purchaseRes; } }
     }
   } catch (_) { byAcc = null; }
-  return { total, reserved, pending, pendingTotal, pendingAll, weeklyShare, byAcc, free: total - reserved - pendingTotal };
+  return { total, reserved, pending, pendingTotal, pendingAll, weeklyShare, byAcc, purchaseRes, free: total - reserved - pendingTotal - purchaseRes };
 }
 function clarityCard() {
   const range = homePeriodRange(), hm = homeAvailable(range), pending = hm.pending, pendingTotal = hm.pendingAll ?? hm.pendingTotal;
@@ -652,6 +667,7 @@ function homePeriodCard() {
       <div><span>Dinero en todas tus cuentas${r.historical ? ' al cierre' : ''}</span><b>${fmt(money.total)}</b></div>
       <div><span>${money.weeklyShare ? `Reservado para cuentas del mes · ${money.weeklyShare.n === 1 ? 'parte de este pago' : `parte de ${money.weeklyShare.n} pagos`} (de ${fmt(money.pendingAll)} pendientes ÷ ${money.weeklyShare.left} ${esc(dayPl(DAYS[payday()]))})` : 'Reservado para cuentas del mes'}</span><b>−${fmt(money.pendingTotal)}</b></div>
       <div><span>Reservado para ahorro y emergencia</span><b>−${fmt(money.reserved)}</b></div>
+      ${money.purchaseRes ? `<div><span>Reservado para tus compras planeadas</span><b>−${fmt(money.purchaseRes)}</b></div>` : ''}
       <div class="clear-free"><span>Dinero libre</span><b>${fmt(money.free)}</b></div></div></details>
     <div class="period-income"><div class="summary-head"><h3>Ingresos ${periodName}</h3><b>${fmt(inc)}</b></div>
       <div class="kv"><span>Gastos registrados</span><b>${fmt(exp)}</b></div><div class="kv"><span>Ahorro reservado de estos ingresos</span><b>${fmt(reservedAmounts(txs).total)}</b></div>
@@ -752,7 +768,7 @@ function accFreeLine(money) {
   const list = (money && money.byAcc || []).filter(a => a.total || a.pend || a.reserved);
   if (list.length < 2) return '';
   const neg = list.find(a => a.free < 0), other = neg && list.find(a => a !== neg && a.free >= -neg.free);
-  return `<div class="acc-free">${list.map(a => `<div class="${a.free < 0 ? 'neg' : ''}"><span>${a.icon} ${esc(a.name)} libre</span><b>${fmt(a.free)}</b><small>${fmt(a.total)} en la cuenta${a.pend ? ` · ${fmt(a.pend)} para gastos mensuales` : ''}${a.reserved ? ` · ${fmt(a.reserved)} ahorro` : ''}</small></div>`).join('')}</div>${neg ? `<p class="essential-note acc-move">${other ? `💡 Pasa ${fmt(-neg.free)} de ${esc(other.name)} a ${esc(neg.name)} para cubrir lo que pagas ${neg.id === cashAcc() ? 'en efectivo' : 'con débito'}.` : `💡 En ${esc(neg.name)} falta ${fmt(-neg.free)} para lo que pagas ${neg.id === cashAcc() ? 'en efectivo' : 'con débito'}.`}</p>` : ''}`;
+  return `<div class="acc-free">${list.map(a => `<div class="${a.free < 0 ? 'neg' : ''}"><span>${a.icon} ${esc(a.name)} libre</span><b>${fmt(a.free)}</b><small>${fmt(a.total)} en la cuenta${a.pend ? ` · ${fmt(a.pend)} para gastos mensuales` : ''}${a.reserved ? ` · ${fmt(a.reserved)} ahorro` : ''}${a.buy ? ` · ${fmt(a.buy)} para tus compras` : ''}</small></div>`).join('')}</div>${neg ? `<p class="essential-note acc-move">${other ? `💡 Pasa ${fmt(-neg.free)} de ${esc(other.name)} a ${esc(neg.name)} para cubrir lo que pagas ${neg.id === cashAcc() ? 'en efectivo' : 'con débito'}.` : `💡 En ${esc(neg.name)} falta ${fmt(-neg.free)} para lo que pagas ${neg.id === cashAcc() ? 'en efectivo' : 'con débito'}.`}</p>` : ''}`;
 }
 function essentialHomeCard() {
   const { period, range: r, money, plan: p, limited, amount, spentToday, ratio } = essentialSummary();
@@ -805,7 +821,7 @@ function purchasesCard() {
     ${weekly > 0 ? `<div class="purchase-total"><span>Para tus compras con pagos disponibles</span><b>${fmt(weekly)} por ${esc(DAYS[payday()])}</b></div>` : ''}
     ${unresolved ? `<p class="mnote">${unresolved} ${unresolved === 1 ? 'compra necesita' : 'compras necesitan'} una fecha con pagos disponibles para calcular su ahorro semanal.</p>` : ''}
     ${purchases.length ? `<div class="purchase-list">${purchases.map(g => purchaseRow(g)).join('')}</div>` : '<p class="muted">Aún no tienes compras planeadas. Agrega, por ejemplo, ropa para diciembre.</p>'}
-    <p class="mnote">Es un plan de ahorro: no aparta dinero ni registra gastos automáticamente. Los pagos se cuentan desde tu fecha de inicio, incluido el de hoy si corresponde.</p>
+    <p class="mnote">Lo que toca ahorrar en cada pago se reserva del dinero libre de Inicio. Cuando compres, anota el gasto y marca la compra. Los pagos se cuentan desde tu fecha de inicio, incluido el de hoy si corresponde.</p>
   </section>`;
 }
 
