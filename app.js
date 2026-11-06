@@ -438,7 +438,8 @@ function weeklyFixedPlan(month = ui.month) {
   const pays = paydaysInMonth(month);
   const ref = refDay(), refMonth = ref.slice(0, 7);
   let left = 0;
-  for (let d = firstPaydayFrom(month + '-01'); d.startsWith(month); d = addDays(d, 7)) if (d >= ref) left++;
+  const cur = weekStart(ref); // el sueldo de esta semana sigue contando hasta el próximo día de pago
+  for (let d = firstPaydayFrom(month + '-01'); d.startsWith(month); d = addDays(d, 7)) if (d >= cur) left++;
   if (month > refMonth) left = pays; // mes futuro: quedan todos
   const pending = pendingFixed(month).reduce((s, p) => s + p.amount, 0);
   return { total, pays, left, pending, paid: Math.max(0, total - pending), perLeft: left ? Math.ceil(pending / left) : 0,
@@ -504,11 +505,27 @@ function homeAvailable(range = homePeriodRange()) {
     if (t.type === 'transferencia') { if (ids.has(t.from)) total -= t.amount; if (ids.has(t.to)) total += t.amount; }
   }
   const reserved = reservedAmounts(txs.filter(t => ids.has(accId(t)))).total;
-  const pending = pendingFixed(ui.month, asOf), pendingTotal = pending.reduce((sum, p) => sum + p.amount, 0);
-  return { total, reserved, pending, pendingTotal, free: total - reserved - pendingTotal };
+  const pending = pendingFixed(ui.month, asOf), pendingAll = pending.reduce((sum, p) => sum + p.amount, 0);
+  // Admin con sueldo semanal: en Día/Semana/Quincena se reserva solo la parte de los gastos mensuales
+  // que toca cubrir con este pago (la misma de la tarjeta "Separa de cada sueldo"); en Mes, todo.
+  let pendingTotal = pendingAll, weeklyShare = null;
+  try {
+    if (isAdmin() && !range.historical && !range.future && range.from && range.to) {
+      const plan = weeklyFixedPlan(ui.month);
+      const wholeMonth = range.title === 'Este mes';
+      if (!wholeMonth && plan.current && plan.left > 0 && pendingAll > 0) {
+        // sueldos ya recibidos desde el pago de esta semana (lo que se separa de cada sueldo)
+        let n = 0;
+        for (let d = weekStart(range.date); d <= range.date; d = addDays(d, 7)) if (d.startsWith(ui.month)) n++;
+        n = Math.max(1, n);
+        if (n < plan.left) { pendingTotal = Math.min(pendingAll, Math.ceil(pendingAll / plan.left) * n); weeklyShare = { n, left: plan.left }; }
+      }
+    }
+  } catch (_) {}
+  return { total, reserved, pending, pendingTotal, pendingAll, weeklyShare, free: total - reserved - pendingTotal };
 }
 function clarityCard() {
-  const range = homePeriodRange(), { pending, pendingTotal } = homeAvailable(range);
+  const range = homePeriodRange(), hm = homeAvailable(range), pending = hm.pending, pendingTotal = hm.pendingAll ?? hm.pendingTotal;
   const cats = budgetCats(ui.month).filter(c => budgetFor(c) > 0);
   return `<section class="card clear"><div class="summary-head"><h3>Próximas cuentas</h3><a href="#" data-tab="presupuesto">Ver todo</a></div>
     <p class="muted">Pendientes de ${esc(monthLabel(ui.month))} · ${fmt(pendingTotal)}</p>
@@ -554,7 +571,7 @@ function homePeriodCard() {
     ${money.free < 0 ? '<p class="neg">El dinero registrado no alcanza para todas tus reservas. Revisa tus cuentas pendientes.</p>' : ''}
     <details class="period-math"><summary>¿Cómo se calcula mi disponible?</summary><div class="clear-math">
       <div><span>Dinero en todas tus cuentas${r.historical ? ' al cierre' : ''}</span><b>${fmt(money.total)}</b></div>
-      <div><span>Reservado para cuentas del mes</span><b>−${fmt(money.pendingTotal)}</b></div>
+      <div><span>${money.weeklyShare ? `Reservado para cuentas del mes · ${money.weeklyShare.n === 1 ? 'parte de este pago' : `parte de ${money.weeklyShare.n} pagos`} (de ${fmt(money.pendingAll)} pendientes ÷ ${money.weeklyShare.left} ${esc(dayPl(DAYS[payday()]))})` : 'Reservado para cuentas del mes'}</span><b>−${fmt(money.pendingTotal)}</b></div>
       <div><span>Reservado para ahorro y emergencia</span><b>−${fmt(money.reserved)}</b></div>
       <div class="clear-free"><span>Dinero libre</span><b>${fmt(money.free)}</b></div></div></details>
     <div class="period-income"><div class="summary-head"><h3>Ingresos ${periodName}</h3><b>${fmt(inc)}</b></div>
