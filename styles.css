@@ -1196,3 +1196,15 @@ body:has(.essential-home) .fab { display:none; }
 .budget-totals { margin:12px 0 4px; padding:14px 16px 4px; border-radius:16px; background:var(--card2, rgba(127,127,127,.08)); }
 .budget-totals-sum { border-top:1px solid rgba(127,127,127,.25); padding-top:10px; }
 .budget-totals-sum span, .budget-totals-sum b { color:var(--text); font-weight:650; }
+
+/* 💵/🏦 Dinero libre por cuenta y forma de pago de gastos mensuales */
+.acc-free { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
+.acc-free > div { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: grid; gap: 2px; background: var(--card); }
+.acc-free span { font-size: .78rem; color: var(--muted); }
+.acc-free b { font-size: 1.05rem; }
+.acc-free small { font-size: .72rem; color: var(--muted); line-height: 1.35; }
+.acc-free > div.neg b { color: var(--neg); }
+.acc-move { margin-top: 4px; }
+.weekly-fixed .wf-split { display: block; margin-top: 4px; font-weight: 600; opacity: .9; }
+.budget-way { display: block; margin: 2px 0 6px; color: var(--muted); font-size: .8rem; }
+@media (max-width: 360px) { .acc-free { grid-template-columns: 1fr; } }

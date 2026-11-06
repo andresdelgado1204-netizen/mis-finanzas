@@ -423,6 +423,31 @@ function deltaTag(now, before, good = 'down') {
   const up = p > 0, ok = good === 'down' ? !up : up;
   return `<span class="delta ${ok ? 'good' : 'bad'}" title="Frente a ${esc(monthLabel(shiftMonth(ui.month, -1)))}">${up ? '↑' : '↓'} ${Math.abs(p)}%</span>`;
 }
+// 💵/💳 Cómo se paga cada gasto mensual: una parte en efectivo (settings.budgetCash) y el resto con débito
+const cashAcc = () => (allAccounts().find(a => a.kind === 'efectivo') || {}).id;
+const debitAcc = () => (allAccounts().find(a => a.id === 'banco' && a.kind !== 'efectivo') || allAccounts().find(a => a.kind !== 'efectivo') || {}).id;
+function budgetCashOf(cat, month = ui.month) { return Math.max(0, Math.min(budgetFor(cat, month), Number((data.settings.budgetCash || {})[cat]) || 0)); }
+function splitAvailable() { return !!cashAcc() && !!debitAcc(); }
+function pendingSplit(p, month = ui.month, asOf = '9999-12-31') {
+  const cash = splitAvailable() ? budgetCashOf(p.cat, month) : 0, ca = cashAcc();
+  if (!cash) return { cash: 0, debit: p.amount };
+  const cashSpent = txOfMonth(month).filter(t => t.type === 'gasto' && t.category === p.cat && t.date <= asOf && accId(t) === ca).reduce((n, t) => n + t.amount, 0);
+  const c = Math.min(p.amount, Math.max(0, cash - cashSpent));
+  return { cash: c, debit: p.amount - c };
+}
+function budgetPayments(cat, month = ui.month) { return live(data.transactions).filter(t => t.type === 'gasto' && t.amount > 0 && t.category === cat && t.budgetMonth === month && t.date.startsWith(month)); }
+function payWayOption(cat, amount) {
+  const cash = splitAvailable() ? Math.min(amount, budgetCashOf(cat)) : 0;
+  if (!(cash > 0) || cash >= amount) return '';
+  return `<option value="__split__" selected>💵 ${esc(accName(cashAcc()))} ${fmt(cash)} + 🏦 ${esc(accName(debitAcc()))} ${fmt(amount - cash)}</option>`;
+}
+function defaultPayAcc(cat, amount) { const cash = splitAvailable() ? budgetCashOf(cat) : 0; return cash >= amount && cash > 0 ? cashAcc() : debitAcc() || ''; }
+function budgetPaymentTxs(cat, month, amount, account, date) {
+  const base = { type: 'gasto', category: cat, date, budgetMonth: month, note: 'Pago de gastos mensuales', createdAt: now(), updatedAt: now() };
+  if (account !== '__split__') return [{ ...base, id: budgetPaymentId(cat, month), amount, account }];
+  const cash = Math.min(amount, budgetCashOf(cat, month)), id = budgetPaymentId(cat, month);
+  return [{ ...base, id, amount: amount - cash, account: debitAcc() }, { ...base, id: id + ':efectivo', amount: cash, account: cashAcc() }].filter(t => t.amount > 0);
+}
 // lo que falta por gastar/pagar de cada gasto mensual (sin contar dos veces lo que ya gastaste en esa categoría)
 function pendingFixed(month = ui.month, asOf = '9999-12-31') {
   const spent = {};
@@ -441,8 +466,10 @@ function weeklyFixedPlan(month = ui.month) {
   const cur = weekStart(ref); // el sueldo de esta semana sigue contando hasta el próximo día de pago
   for (let d = firstPaydayFrom(month + '-01'); d.startsWith(month); d = addDays(d, 7)) if (d >= cur) left++;
   if (month > refMonth) left = pays; // mes futuro: quedan todos
-  const pending = pendingFixed(month).reduce((s, p) => s + p.amount, 0);
-  return { total, pays, left, pending, paid: Math.max(0, total - pending), perLeft: left ? Math.ceil(pending / left) : 0,
+  const pend = pendingFixed(month), pending = pend.reduce((s, p) => s + p.amount, 0);
+  const cashPending = pend.reduce((s, p) => s + pendingSplit(p, month).cash, 0);
+  const perLeft = left ? Math.ceil(pending / left) : 0, perCash = left ? Math.min(perLeft, Math.ceil(cashPending / left)) : 0;
+  return { total, pays, left, pending, cashPending, paid: Math.max(0, total - pending), perLeft, perCash, perDebit: perLeft - perCash,
     current: month === refMonth, past: month < refMonth };
 }
 function dayPl(d) { return /s$/.test(d) ? d : d + 's'; }
@@ -459,7 +486,8 @@ function weeklyFixedCard(month = ui.month) {
     return `<div class="purchase-total weekly-fixed"><span>Por pagar de tus gastos mensuales<small>No quedan ${esc(dayPl(day))} de pago en ${mon}${paidNote}</small></span><b>${fmt(p.pending)}</b></div>`;
   }
   const quedan = p.left === p.pays ? `${p.left} ${esc(dayPl(day))} de ${mon}` : (p.left === 1 ? `1 ${esc(day)} que queda` : `${p.left} ${esc(dayPl(day))} que quedan`);
-  return `<div class="purchase-total weekly-fixed"><span>Separa de cada sueldo para tus gastos mensuales<small>${fmt(p.pending)} por pagar ÷ ${quedan}${paidNote}</small></span><b>${fmt(p.perLeft)} por ${esc(day)}</b></div>`;
+  const split = p.perCash > 0 ? `<small class="wf-split">💵 Efectivo ${fmt(p.perCash)} · 💳 Débito ${fmt(p.perDebit)}</small>` : '';
+  return `<div class="purchase-total weekly-fixed"><span>Separa de cada sueldo para tus gastos mensuales<small>${fmt(p.pending)} por pagar ÷ ${quedan}${paidNote}</small>${split}</span><b>${fmt(p.perLeft)} por ${esc(day)}</b></div>`;
 }
 // Resumen del mes: total de gastos mensuales (pagado / por pagar) más los extras (gastos fuera de los mensuales)
 function budgetTotalsCard(month = ui.month) {
@@ -522,7 +550,27 @@ function homeAvailable(range = homePeriodRange()) {
       }
     }
   } catch (_) {}
-  return { total, reserved, pending, pendingTotal, pendingAll, weeklyShare, free: total - reserved - pendingTotal };
+  // por cuenta: efectivo y banco (débito)
+  let byAcc = null;
+  try {
+    if (splitAvailable()) {
+      const ca = cashAcc(), da = debitAcc(), bal = {};
+      for (const a of allAccounts()) bal[a.id] = a.initial || 0;
+      for (const t of txs) {
+        if (t.type === 'ingreso' || t.type === 'ajuste') { if (ids.has(accId(t))) bal[accId(t)] += t.amount; }
+        else if (t.type === 'gasto') { if (ids.has(accId(t))) bal[accId(t)] -= t.amount; }
+        else if (t.type === 'transferencia') { if (ids.has(t.from)) bal[t.from] -= t.amount; if (ids.has(t.to)) bal[t.to] += t.amount; }
+      }
+      const res = {};
+      for (const t of txs) if (t.type === 'ingreso' && t.reserves && ids.has(accId(t))) res[accId(t)] = (res[accId(t)] || 0) + roundSave(t.reserves.emergency) + roundSave(t.reserves.savings);
+      const cashAll = pending.reduce((n, p) => n + pendingSplit(p, ui.month, asOf).cash, 0);
+      const cashRes = weeklyShare ? Math.min(cashAll, Math.ceil(cashAll / weeklyShare.left) * weeklyShare.n, pendingTotal) : cashAll;
+      const debitRes = Math.max(0, pendingTotal - cashRes);
+      byAcc = allAccounts().map(a => { const pend = a.id === ca ? cashRes : a.id === da ? debitRes : 0, r = res[a.id] || 0;
+        return { id: a.id, name: a.name, icon: accIcon(a), total: bal[a.id] || 0, reserved: r, pend, free: (bal[a.id] || 0) - r - pend }; });
+    }
+  } catch (_) { byAcc = null; }
+  return { total, reserved, pending, pendingTotal, pendingAll, weeklyShare, byAcc, free: total - reserved - pendingTotal };
 }
 function clarityCard() {
   const range = homePeriodRange(), hm = homeAvailable(range), pending = hm.pending, pendingTotal = hm.pendingAll ?? hm.pendingTotal;
@@ -669,6 +717,12 @@ function recentExpenseShortcuts(reference) {
     .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0))
     .filter(t => { const key = (t.expenseName || t.category || '').trim().toLocaleLowerCase(); if (!key || seen.has(key)) return false; seen.add(key); return true; }).slice(0, 3);
 }
+function accFreeLine(money) {
+  const list = (money && money.byAcc || []).filter(a => a.total || a.pend || a.reserved);
+  if (list.length < 2) return '';
+  const neg = list.find(a => a.free < 0), other = neg && list.find(a => a !== neg && a.free >= -neg.free);
+  return `<div class="acc-free">${list.map(a => `<div class="${a.free < 0 ? 'neg' : ''}"><span>${a.icon} ${esc(a.name)} libre</span><b>${fmt(a.free)}</b><small>${fmt(a.total)} en la cuenta${a.pend ? ` · ${fmt(a.pend)} para gastos mensuales` : ''}${a.reserved ? ` · ${fmt(a.reserved)} ahorro` : ''}</small></div>`).join('')}</div>${neg ? `<p class="essential-note acc-move">${other ? `💡 Pasa ${fmt(-neg.free)} de ${esc(other.name)} a ${esc(neg.name)} para cubrir lo que pagas ${neg.id === cashAcc() ? 'en efectivo' : 'con débito'}.` : `💡 En ${esc(neg.name)} falta ${fmt(-neg.free)} para lo que pagas ${neg.id === cashAcc() ? 'en efectivo' : 'con débito'}.`}</p>` : ''}`;
+}
 function essentialHomeCard() {
   const { period, range: r, money, plan: p, limited, amount, spentToday, ratio } = essentialSummary();
   const labels = { dia: limited ? 'Para ocio hoy' : 'Sugerido para hoy', semana: limited ? 'Para ocio esta semana' : 'Dinero libre · esta semana', quincena: 'Dinero libre · esta quincena', mes: 'Dinero libre · este mes' };
@@ -677,7 +731,7 @@ function essentialHomeCard() {
   return `<section class="essential-overview" aria-label="Resumen esencial">
     <div class="period-switch" role="group" aria-label="Período de Inicio">${[['dia','Día'],['semana','Semana'],['quincena','Quincena'],['mes','Mes']].map(([v, label]) => `<button type="button" data-action="home-period" data-v="${v}" aria-pressed="${period === v}">${label}</button>`).join('')}</div>
     <p class="essential-caption">${esc(caption)}</p>
-    <h3 class="essential-label">${labels[period]}</h3><div class="essential-amount ${amount < 0 ? 'neg' : ''}">${fmt(amount)}</div>
+    <h3 class="essential-label">${labels[period]}</h3><div class="essential-amount ${amount < 0 ? 'neg' : ''}">${fmt(amount)}</div>${accFreeLine(money)}
     <p class="essential-note">${limited ? `${period === 'dia' ? 'Sugerencia diaria · ' : ''}Quedan ${fmt(p.remaining.ocio)} de tu límite semanal de ${fmt(p.limits.ocio)}` : 'Dinero recibido, con cuentas y ahorro reservados'}</p>
     ${limited && p.suggested < p.remaining.ocio ? `<p class="essential-note">Tu dinero después de las reservas permite usar ${fmt(p.suggested)} esta semana.</p>` : ''}
     ${p.limits.ocio > 0 ? `<div class="essential-week"><div class="essential-track" role="progressbar" aria-label="Límite de ocio semanal utilizado" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(ratio * 100))}" aria-valuetext="${fmt(p.spent.ocio)} gastados de ${fmt(p.limits.ocio)}"><span style="width:${Math.min(100, ratio * 100)}%"></span></div><div><span>Ocio semanal · ${fmt(p.spent.ocio)} gastados</span><span>${Math.round(ratio * 100)}%</span></div></div>` : ''}
@@ -839,10 +893,13 @@ function budgetPayment(cat, month = ui.month) {
   return live(data.transactions).find(t => t.type === 'gasto' && t.amount > 0 && t.category === cat && t.budgetMonth === month && t.date.startsWith(month));
 }
 function budgetPaidControl(cat) {
-  const paid = budgetPayment(cat), amount = budgetFor(cat);
+  const paid = budgetPayment(cat), amount = budgetFor(cat), all = budgetPayments(cat), cash = splitAvailable() ? budgetCashOf(cat) : 0;
+  const way = cash > 0 ? `<small class="budget-way">💵 ${fmt(cash)} en efectivo${amount > cash ? ` · 💳 ${fmt(amount - cash)} con débito` : ''}</small>` : '';
+  if (paid && all.length > 1) return `<label class="budget-repeat budget-paid"><input type="checkbox" data-budget-pay="${esc(cat)}" checked>
+    Pagado: ${fmt(all.reduce((n, t) => n + t.amount, 0))} · ${all.map(t => `${esc(accName(accId(t)))} ${fmt(t.amount)}`).join(' + ')}</label>${way}`;
   return `<label class="budget-repeat budget-paid"><input type="checkbox" data-budget-pay="${esc(cat)}" ${paid ? 'checked' : ''} ${paid || amount > 0 ? '' : 'disabled'}>
     ${paid ? `Pagado: ${fmt(paid.amount)} · ${esc(accName(accId(paid)))}` : 'Marcar como pagado'}</label>
-    ${paid ? `<button type="button" class="btn ghost edit-budget-payment" data-action="edit-tx" data-id="${esc(paid.id)}">Editar pago</button>` : ''}`;
+    ${paid ? `<button type="button" class="btn ghost edit-budget-payment" data-action="edit-tx" data-id="${esc(paid.id)}">Editar pago</button>` : ''}${way}`;
 }
 function budgetBulkControl() {
   const payable = budgetCats().filter(c => budgetFor(c) > 0);
@@ -860,7 +917,7 @@ function openBulkBudgetPayment() {
   const spent = spentByCat(month);
   $('#bulkBudgetRows').innerHTML = items.map((item, index) => `<div class="bulk-budget-row"><b>${esc(item.cat)} · ${fmt(item.amount)}</b>
     ${spent[item.cat] > 0 ? `<p class="muted">Ya hay ${fmt(spent[item.cat])} registrados en esta categoría; este pago se sumará.</p>` : ''}
-    <label>Cuenta para ${withEmoji(item.cat)}<select name="account-${index}" required><option value="" disabled selected>Elige una cuenta</option>${accOptions('')}</select></label></div>`).join('');
+    <label>Cuenta para ${withEmoji(item.cat)}<select name="account-${index}" required><option value="" disabled ${payWayOption(item.cat, item.amount) || defaultPayAcc(item.cat, item.amount) ? '' : 'selected'}>Elige una cuenta</option>${payWayOption(item.cat, item.amount)}${accOptions(payWayOption(item.cat, item.amount) ? '' : defaultPayAcc(item.cat, item.amount))}</select></label></div>`).join('');
   f.date.min = month + '-01'; f.date.max = addDays(shiftMonth(month, 1) + '-01', -1);
   f.date.value = today().startsWith(month) ? today() : month + '-01';
   $('#bulkBudgetDialog').showModal();
@@ -874,7 +931,8 @@ function openBudgetPayment(cat) {
   f.reset();
   $('#budgetPayTitle').textContent = 'Pagar ' + ((emojiFor(cat) ? emojiFor(cat) + ' ' : '') + cat);
   $('#budgetPayAmount').textContent = fmt(amount);
-  f.account.innerHTML = '<option value="" disabled selected>Elige una cuenta</option>' + accOptions('');
+  const split = payWayOption(cat, amount), def = split ? '' : defaultPayAcc(cat, amount);
+  f.account.innerHTML = `<option value="" disabled ${split || def ? '' : 'selected'}>Elige una cuenta</option>` + split + accOptions(def);
   f.date.min = ui.month + '-01';
   f.date.max = addDays(shiftMonth(ui.month, 1) + '-01', -1);
   f.date.value = today().startsWith(ui.month) ? today() : ui.month + '-01';
@@ -1661,6 +1719,7 @@ const views = {
           <button class="iconbtn" data-action="del-budget" data-cat="${esc(c)}" aria-label="Quitar ${esc(c)} de gastos mensuales" title="Quitar de gastos mensuales">✕</button></span></div>
         <label class="budget-due">Día de vencimiento (opcional)<input type="number" min="1" max="31" step="1" inputmode="numeric" placeholder="Sin fecha" value="${ab?.dueDay || ''}" data-budget-due="${esc(c)}"></label>
         <label class="budget-repeat"><input type="checkbox" data-budget-repeat="${esc(c)}" ${fixed ? 'checked' : ''}> Monto fijo</label>
+        ${splitAvailable() ? `<label class="budget-due">💵 Cuánto pagas en efectivo (el resto con débito)<input type="number" min="0" step="any" inputmode="numeric" placeholder="0 · todo con débito" value="${(data.settings.budgetCash || {})[c] || ''}" data-budget-cash="${esc(c)}"></label>` : ''}
         </details>
       </div>`;
     }).join('');
@@ -2364,8 +2423,9 @@ document.addEventListener('change', e => {
     const paid = budgetPayment(cat);
     if (paid) {
       el.checked = true;
-      ask(`¿Desmarcar ${cat} como pagado? Se anulará el gasto de ${fmt(paid.amount)} y ese monto volverá al saldo de ${accName(accId(paid))}.`, 'Desmarcar pago')
-        .then(ok => { if (ok) { remove('transactions', paid.id); toast('Pago desmarcado y saldo actualizado'); } else render(); });
+      const all = budgetPayments(cat);
+      ask(`¿Desmarcar ${cat} como pagado? Se anulará${all.length > 1 ? 'n los pagos' : ' el gasto'} de ${fmt(all.reduce((n, t) => n + t.amount, 0))} y ese monto volverá al saldo de ${[...new Set(all.map(t => accName(accId(t))))].join(' y ')}.`, 'Desmarcar pago')
+        .then(ok => { if (ok) { const t0 = now(); for (const t of all) { const i = data.transactions.findIndex(x => x.id === t.id); if (i >= 0) data.transactions[i] = { id: t.id, deleted: true, updatedAt: t0 }; } commit(); toast('Pago desmarcado y saldo actualizado'); } else render(); });
     } else {
       el.checked = false;
       openBudgetPayment(cat);
@@ -2380,6 +2440,15 @@ document.addEventListener('change', e => {
     const cat = el.dataset.budgetRepeat;
     saveBudgetMonth(cat, budgetFor(cat), true, false, el.checked);
     toast(el.checked ? 'Monto fijo: se repite igual cada mes' : 'Monto variable: puedes cambiarlo cada mes');
+  }
+  if (el.dataset.budgetCash !== undefined) {
+    const cat = el.dataset.budgetCash, v = el.value === '' ? 0 : Math.max(0, Math.round(Number(el.value) || 0));
+    const map = Object.assign({}, data.settings.budgetCash || {});
+    if (v > 0) map[cat] = v; else delete map[cat];
+    data.settings = Object.assign({}, data.settings, { budgetCash: map, updatedAt: now() });
+    commit();
+    const b = budgetFor(cat);
+    toast(v > 0 ? `${cat}: ${fmt(Math.min(v, b || v))} en efectivo${b > v ? ` y ${fmt(b - v)} con débito` : ''}` : `${cat}: todo con débito`);
   }
   if (el.dataset.budgetDue !== undefined) {
     const dueDay = el.value === '' ? 0 : Number(el.value);
@@ -2422,15 +2491,14 @@ document.addEventListener('submit', e => {
     if (!pending) return;
     if (!f.date.value.startsWith(pending.month)) { toast('Elige una fecha del mes seleccionado'); return; }
     const selected = pending.items.map((item, index) => ({ ...item, account: f.elements.namedItem('account-' + index).value }));
-    if (selected.some(item => !accounts().some(a => a.id === item.account))) { toast('Elige la cuenta de cada gasto'); return; }
+    if (selected.some(item => item.account !== '__split__' && !accounts().some(a => a.id === item.account))) { toast('Elige la cuenta de cada gasto'); return; }
     let added = 0;
     for (const item of selected) {
       if (budgetPayment(item.cat, pending.month)) continue;
-      const tx = { id: budgetPaymentId(item.cat, pending.month), type: 'gasto', category: item.cat,
-        amount: item.amount, account: item.account, date: f.date.value, budgetMonth: pending.month,
-        note: 'Pago de gastos mensuales', createdAt: now(), updatedAt: now() };
-      const index = data.transactions.findIndex(t => t.id === tx.id);
-      if (index >= 0) data.transactions[index] = tx; else data.transactions.push(tx);
+      for (const tx of budgetPaymentTxs(item.cat, pending.month, item.amount, item.account, f.date.value)) {
+        const index = data.transactions.findIndex(t => t.id === tx.id);
+        if (index >= 0) data.transactions[index] = tx; else data.transactions.push(tx);
+      }
       added++;
     }
     pendingBulkPayment = null;
@@ -2443,11 +2511,13 @@ document.addEventListener('submit', e => {
     const pending = pendingBudgetPayment, f = e.target;
     if (!pending) return;
     if (budgetPayment(pending.cat, pending.month)) { $('#budgetPayDialog').close(); render(); toast('Este pago ya está registrado'); return; }
-    if (!accounts().some(a => a.id === f.account.value)) { toast('Elige una cuenta'); return; }
+    if (f.account.value !== '__split__' && !accounts().some(a => a.id === f.account.value)) { toast('Elige una cuenta'); return; }
     if (!f.date.value.startsWith(pending.month)) { toast('Elige una fecha del mes seleccionado'); return; }
-    upsert('transactions', { id: budgetPaymentId(pending.cat, pending.month), type: 'gasto',
-      category: pending.cat, amount: pending.amount, account: f.account.value, date: f.date.value,
-      budgetMonth: pending.month, note: 'Pago de gastos mensuales', createdAt: now() });
+    for (const tx of budgetPaymentTxs(pending.cat, pending.month, pending.amount, f.account.value, f.date.value)) {
+      const index = data.transactions.findIndex(t => t.id === tx.id);
+      if (index >= 0) data.transactions[index] = tx; else data.transactions.push(tx);
+    }
+    commit();
     pendingBudgetPayment = null;
     $('#budgetPayDialog').close();
     toast('Pago registrado y descontado de la cuenta'); return;
